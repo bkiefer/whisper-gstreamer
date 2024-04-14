@@ -31,7 +31,8 @@ asr_sample_rate: 16000
 
 whisper:
   model_size: large-v2
-  device: cpu
+  device: gpu
+#  compute_type: float32
 #  language: de
 #  task: null
 #  initial_prompt: ''

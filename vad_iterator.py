@@ -1,5 +1,9 @@
 import torch
 
+"""
+Class copied from utils.py of https://github.com/SYSTRAN/faster-whisper
+Distributed under MIT License
+"""
 class VADIterator:
     def __init__(self,
                  model,

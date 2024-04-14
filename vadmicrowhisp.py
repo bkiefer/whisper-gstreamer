@@ -88,6 +88,7 @@ class WhisperMicroServer():
     MAX_BUF_RETENTION = 5
     MIN_SPEECH_DETECTS = 3
     MIN_SILENCE_DETECTS = 6
+    BUFFER_SIZE = 1536
 
     def __init__(self, config):
         self.pid = "whisperasr"
@@ -98,6 +99,7 @@ class WhisperMicroServer():
         self.usedchannel = 0
         self.sample_rate = 16000
         self.asr_sample_rate = 16000
+        self.buffers_queued = 2
 
         self.config = config
         if 'asr_sample_rate' in config:
@@ -110,6 +112,8 @@ class WhisperMicroServer():
             self.audio_dir = config['audio_dir']
         if 'language' in config:
             self.language = config['language']
+        if 'buffers_queued' in config:
+            self.buffers_queued = config['buffers_queued']
         self.topic = self.pid + '/asrresult'
         if self.language:
             self.topic += '/' + self.language
@@ -246,11 +250,12 @@ class WhisperMicroServer():
     async def audio_loop(self):
         logger.info(f'sample_rate: {self.asr_sample_rate}')
         is_voice = False
-        voice_buffers = []
-        window_size_samples = 1536
+        window_size_samples = WhisperMicroServer.BUFFER_SIZE
+        framesqueued = window_size_samples * self.buffers_queued
+        voice_buffers = [0] * framesqueued
         out_buffer = []
         while True:
-            while len(voice_buffers) < window_size_samples:
+            while len(voice_buffers) < window_size_samples + framesqueued:
                 # this is a byte buffer
                 audio = await self.audio_queue.get()
                 frame = np.frombuffer(audio, dtype=np.int16)
@@ -263,7 +268,7 @@ class WhisperMicroServer():
                 #print('vb1', len(voice_buffers))
                 voice_buffers.extend(frame.tolist())
 
-            ichunk = voice_buffers[:window_size_samples]
+            ichunk = voice_buffers[framesqueued:framesqueued + window_size_samples]
             chunk = np.array(ichunk, dtype=np.int16)
             vadbuf = chunk / 32768
             speech_dict = self.vad_iterator(vadbuf, return_seconds=True)
@@ -276,8 +281,9 @@ class WhisperMicroServer():
                     if "monitor_asr" in self.config:
                         self.wf = self.open_wave_file(
                         self.asrmon_filename(), self.asr_sample_rate)
-                    #self.writeframes(self.silence_buffer)
-                    #await websocket.send(self.silence_buffer)
+                    # add queued buffers to the outbuffer
+                    out_buffer = voice_buffers[:framesqueued]
+                    self.writeframes(np.array(out_buffer, dtype=np.int16).tobytes())
                 elif "end" in speech_dict:
                     if not is_voice:
                         print('VAD end ignored')
