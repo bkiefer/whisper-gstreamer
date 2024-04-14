@@ -1,0 +1,45 @@
+# What's the language of the ASR model (if any, is optional)
+# the language, if set, will be appended to the publishing topic like this:
+#/whisperasr/asrresult/<lang>
+language: de
+
+# adaptation_state_infile="state"
+# adaptation_state_outfile="state"
+
+monitor_mic: true
+monitor_asr: true
+
+# Address of MQTT broker
+mqtt_address: localhost
+
+# List the pulseaudio devices with this command:
+# pacmd list-sources | grep -e 'index:' -e device.string -e 'name:'
+# the one with the '*' is the default device
+
+# Sennheiser USB headset, make sure it's the OS/pulse default device
+# This pipeline does the right conversion already
+pipeline: "pulsesrc ! audioconvert ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
+
+# ReSpeaker V2, make sure it's the OS/pulse default device
+# It's the multichannel device!
+# channels: 6, used channel: 0 (combo channel), sample_rate: 16000
+# This pipeline does the right things already
+#pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=6,rate={} ! deinterleave name=d d.src_0 ! appsink name=sink emit-signals=true"
+
+# sample rate of the ASR model (currently 8k)
+asr_sample_rate: 16000
+
+whisper:
+  model_size: large-v2
+  device: cpu
+#  language: de
+#  task: null
+#  initial_prompt: ''
+#  prefix: ''
+
+#vad:
+#  threshold: 0.5
+#  min_speech_duration: 500
+#  max_speech_duration_s: 50
+#  max_speech_duration_ms: 5
+#  speech_pad_ms: 50
