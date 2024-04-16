@@ -1,5 +1,5 @@
 #!/bin/sh
-set -x
+#set -x
 mkdir audio > /dev/null 2>&1
 
 if test -f silero_vad.jit; then

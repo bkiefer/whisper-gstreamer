@@ -16,6 +16,7 @@ from faster_whisper import WhisperModel
 
 import json
 import paho.mqtt.client as mqtt
+from paho.mqtt.enums import CallbackAPIVersion
 
 import gstmicpipeline as gm
 
@@ -165,7 +166,7 @@ class WhisperMicroServer():
         self.wf = None
 
     def __init_mqtt_client(self):
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(CallbackAPIVersion.VERSION2)
         # self.client.username_pw_set(self.mqtt_username, self.mqtt_password)
         # self.client.on_connect = self.__on_mqtt_connect
 
