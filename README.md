@@ -35,6 +35,8 @@ Maybe you have to adapt the pipeline in `local_de_config.yaml`, or the language,
 pacmd list-sources | grep -e 'index:' -e device.string -e 'name:'
 ```
 
+Also, check the path to the cuda native libraries for `LD_LIBRARY_PATH` in the `run_whisper.sh` script in case of problems finding the `.so` libraries.
+
 To set the default source to the ReSpeaker, use:
 
 ```
@@ -44,7 +46,7 @@ pacmd set-default-source 'alsa_input.usb-SEEED_ReSpeaker_4_Mic_Array__UAC1.0_-00
 Check the content of gstmicpipeline.py in case of problems. In the audio directory, the microphone audio is stored in asrmon-XX.wav files and the data transferred to the ASR in chunk-XX.wav
 
 ```
-python vadmicrowhisp.py local_de_config.yaml
+./run_whisper.sh local_de_config.yaml
 ```
 
 The ASR result will be send to the `whisperasr/asrresult/<lang>` MQTT topic.
