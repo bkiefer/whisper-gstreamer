@@ -125,7 +125,10 @@ class WhisperMicroServer():
         self.silence_buffer = bytearray(int(1000 * 2 * (self.asr_sample_rate / 1000)))
         # load silero VAD model
         model = init_jit_model(model_path='silero_vad.jit')
-        self.vad_iterator = VADIterator(model)
+
+        vad_config = config['vad'] if 'vad' in config else dict()
+        #print(type(vad_config['threshold']))
+        self.vad_iterator = VADIterator(model, **vad_config)
         #self.threshold = 0.5
         #print(f'{self.asr_sample_rate} {self.sample_rate} {self.channels}')
 
@@ -146,14 +149,7 @@ class WhisperMicroServer():
             self.config['whisper_transcription'] = dict()
         if self.language and not 'language' in self.config['whisper_transcription']:
             self.config['whisper_transcription']['language'] = self.language
-        logger.info(
-            f"initializing {whisper_config['model_size']} model "
-            f"for {whisper_config['device']} {whisper_config['compute_type']} ...")
-        model_path = "./whisper-models/" + whisper_config['model_size'] + '/'
-        self.whisper_model = WhisperModel(model_path,
-                                          device=whisper_config['device'],
-                                          compute_type=whisper_config['compute_type'])
-        logger.info("Whisper model initialized")
+        self.__init_whisper()
         self.transcription_queue = queue.Queue()
 
         logger.info("start transcription thread...")
@@ -164,6 +160,17 @@ class WhisperMicroServer():
         # for monitoring (eventually)
         self.am = None
         self.wf = None
+
+    def __init_whisper(self):
+        whisper_config = self.config['whisper']
+        logger.info(
+            f"initializing {whisper_config['model_size']} model "
+            f"for {whisper_config['device']} {whisper_config['compute_type']} ...")
+        model_path = "./whisper-models/" + whisper_config['model_size'] + '/'
+        self.whisper_model = WhisperModel(model_path,
+                                          device=whisper_config['device'],
+                                          compute_type=whisper_config['compute_type'])
+        logger.info("Whisper model initialized")
 
     def __init_mqtt_client(self):
         self.client = mqtt.Client(CallbackAPIVersion.VERSION2)
@@ -236,15 +243,21 @@ class WhisperMicroServer():
             # this call blocks until an element can be retrieved from queue
             audio_segment = self.transcription_queue.get()
             conv_params = self.config['whisper_transcription']
-            segments, info = self.whisper_model.transcribe(np.array(audio_segment), **conv_params)
-            logger.info("transcribing...")
-            transcripts = []
-            for segment in segments:
-                logger.info("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
-                conv_dict = named_tupel_to_dictionary(segment)
-                transcripts.append(conv_dict)
-            res = {'info': named_tupel_to_dictionary(info), 'segments': transcripts}
-            self.client.publish(self.topic, json.dumps(res, indent=None))
+            try:
+                segments, info = self.whisper_model.transcribe(np.array(audio_segment), **conv_params)
+                logger.info("transcribing...")
+                transcripts = []
+                for segment in segments:
+                    logger.info("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+                    conv_dict = named_tupel_to_dictionary(segment)
+                    transcripts.append(conv_dict)
+                res = {'info': named_tupel_to_dictionary(info), 'segments': transcripts}
+                self.client.publish(self.topic, json.dumps(res, indent=None))
+            except:
+                del self.whisper_model.model
+                del self.whisper_model
+                self.__init_whisper()
+
 
 
 
