@@ -241,17 +241,20 @@ class WhisperMicroServer():
 
         while True:
             # this call blocks until an element can be retrieved from queue
-            audio_segment = self.transcription_queue.get()
+            audio_segment, start, end = self.transcription_queue.get()
             conv_params = self.config['whisper_transcription']
             try:
                 segments, info = self.whisper_model.transcribe(np.array(audio_segment), **conv_params)
                 logger.info("transcribing...")
                 transcripts = []
                 for segment in segments:
-                    logger.info("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+                    logger.info("[%.2fs -> %.2fs] %s"
+                                % (segment.start, segment.end, segment.text))
                     conv_dict = named_tupel_to_dictionary(segment)
                     transcripts.append(conv_dict)
-                res = {'info': named_tupel_to_dictionary(info), 'segments': transcripts}
+                res = {'info': named_tupel_to_dictionary(info),
+                       'segments': transcripts,
+                       'start':start, 'end':end }
                 self.client.publish(self.topic, json.dumps(res, indent=None))
             except:
                 del self.whisper_model.model
@@ -259,11 +262,9 @@ class WhisperMicroServer():
                 self.__init_whisper()
 
 
-
-
     async def audio_loop(self):
         logger.info(f'sample_rate: {self.asr_sample_rate}')
-        is_voice = False
+        is_voice = None
         window_size_samples = WhisperMicroServer.BUFFER_SIZE
         framesqueued = window_size_samples * self.buffers_queued
         voice_buffers = [0] * framesqueued
@@ -289,7 +290,7 @@ class WhisperMicroServer():
             if speech_dict:
                 #print(f'{speech_dict}')
                 if "start" in speech_dict:
-                    is_voice = True
+                    is_voice = current_milli_time()
                     print('<', end='', flush=True)
                     # monitor what is sent to the ASR
                     if "monitor_asr" in self.config:
@@ -302,12 +303,14 @@ class WhisperMicroServer():
                     if not is_voice:
                         print('VAD end ignored')
                         break
-                    is_voice = False
+                    voice_start = is_voice
+                    is_voice = None
                     print('>', end='', flush=True)
                     self.writeframes(chunk.tobytes())
                     out_buffer.extend(ichunk)
                     self.writeframes(self.silence_buffer)
-                    self.transcription_queue.put(out_buffer)
+                    self.transcription_queue.put(
+                        (out_buffer, voice_start, current_milli_time()))
                     out_buffer = []
                     if self.wf:
                         self.wf.close()
