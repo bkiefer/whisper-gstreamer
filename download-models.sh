@@ -5,7 +5,7 @@ mkdir audio > /dev/null 2>&1
 if test -f silero_vad.jit; then
     :
 else
-    wget https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.jit
+    wget https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.jit
 fi
 
 download_models() {

@@ -29,8 +29,6 @@ logging.basicConfig(
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
-MAX_RECONNECTS = 40
-RECONNECT_WAIT = 5  # SECONDS
 
 
 def int_or_str(text):
@@ -86,10 +84,10 @@ def named_tupel_to_dictionary(tupel):
 
 class WhisperMicroServer():
 
-    MAX_BUF_RETENTION = 5
+    MAX_BUF_RETENTION = 40
     MIN_SPEECH_DETECTS = 3
-    MIN_SILENCE_DETECTS = 6
-    BUFFER_SIZE = 1536
+    MIN_SILENCE_DETECTS = 30
+    BUFFER_SIZE = 512
 
     def __init__(self, config):
         self.pid = "whisperasr"
@@ -100,7 +98,7 @@ class WhisperMicroServer():
         self.usedchannel = 0
         self.sample_rate = 16000
         self.asr_sample_rate = 16000
-        self.buffers_queued = 2
+        self.buffers_queued = 6
 
         self.config = config
         if 'asr_sample_rate' in config:
@@ -132,6 +130,14 @@ class WhisperMicroServer():
         #self.threshold = 0.5
         #print(f'{self.asr_sample_rate} {self.sample_rate} {self.channels}')
 
+        self.__init_whisper()
+        self.__init_transcription_thread()
+
+        # for monitoring (eventually)
+        self.am = None
+        self.wf = None
+
+    def __init_whisper(self):
         self.whisper_model = None
         if 'whisper' not in self.config:
             logger.error('no whisper config section: minimally specify model size')
@@ -149,20 +155,6 @@ class WhisperMicroServer():
             self.config['whisper_transcription'] = dict()
         if self.language and not 'language' in self.config['whisper_transcription']:
             self.config['whisper_transcription']['language'] = self.language
-        self.__init_whisper()
-        self.transcription_queue = queue.Queue()
-
-        logger.info("start transcription thread...")
-        self.transcribe_thread = Thread(target=self.transcribe, daemon=True)
-        self.transcribe_thread.start()
-        logger.info("transcription thread running")
-
-        # for monitoring (eventually)
-        self.am = None
-        self.wf = None
-
-    def __init_whisper(self):
-        whisper_config = self.config['whisper']
         logger.info(
             f"initializing {whisper_config['model_size']} model "
             f"for {whisper_config['device']} {whisper_config['compute_type']} ...")
@@ -171,6 +163,14 @@ class WhisperMicroServer():
                                           device=whisper_config['device'],
                                           compute_type=whisper_config['compute_type'])
         logger.info("Whisper model initialized")
+
+    def __init_transcription_thread(self):
+        self.transcription_queue = queue.Queue()
+
+        logger.info("start transcription thread...")
+        self.transcribe_thread = Thread(target=self.transcribe, daemon=True)
+        self.transcribe_thread.start()
+        logger.info("transcription thread running")
 
     def __init_mqtt_client(self):
         self.client = mqtt.Client(CallbackAPIVersion.VERSION2)
@@ -298,7 +298,8 @@ class WhisperMicroServer():
                         self.asrmon_filename(), self.asr_sample_rate)
                     # add queued buffers to the outbuffer
                     out_buffer = voice_buffers[:framesqueued]
-                    self.writeframes(np.array(out_buffer, dtype=np.int16).tobytes())
+                    audiodata = np.array(out_buffer, dtype=np.int16).tobytes()
+                    self.writeframes(audiodata)
                 elif "end" in speech_dict:
                     if not is_voice:
                         print('VAD end ignored')
@@ -307,8 +308,8 @@ class WhisperMicroServer():
                     is_voice = None
                     print('>', end='', flush=True)
                     self.writeframes(chunk.tobytes())
-                    out_buffer.extend(ichunk)
                     self.writeframes(self.silence_buffer)
+                    out_buffer.extend(ichunk)
                     self.transcription_queue.put(
                         (out_buffer, voice_start, current_milli_time()))
                     out_buffer = []
@@ -320,18 +321,19 @@ class WhisperMicroServer():
                 self.writeframes(chunk.tobytes())
                 out_buffer.extend(ichunk)
 
+
     async def run_micro(self):
         cb = lambda inp, frames: self.callback(inp, frames, None, None)
         pipeline = self.config["pipeline"] if "pipeline" in self.config \
             else gm.PIPELINE
         try:
-            with gm.GstreamerMicroSink(callback=cb, pipeline_spec=pipeline) as device:
+            with gm.GstreamerMicroSink(callback=cb, pipeline_spec=pipeline) \
+                 as device:
                 if "monitor_mic" in self.config:
                     self.am = self.open_wave_file(self.wav_filename(),
                                                   self.sample_rate)
 
                 print("Connecting to MQTT broker")
-                #await self.audio_loop(None)
                 self.mqtt_connect()
                 await self.audio_loop()
         finally:
@@ -346,7 +348,6 @@ async def main(args):
     #    sys.exit(1)
 
     config = { 'mqtt_address':'localhost',
-               'uri':'ws://0.0.0.0:2700/',
                'monitor_mic':True,
                'monitor_asr':True
               }
@@ -354,10 +355,10 @@ async def main(args):
         with open(args[0], 'r') as f:
             config = yaml.safe_load(f)
 
-    wms = WhisperMicroServer(config)
+    ms = WhisperMicroServer(config)
 
     logging.basicConfig(level=logging.INFO)
-    await wms.run_micro()
+    await ms.run_micro()
 
 if __name__ == '__main__':
     asyncio.run(main(sys.argv[1:]))
