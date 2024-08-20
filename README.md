@@ -1,7 +1,5 @@
 # An ASR microphone server using a faster whisper model sending output to MQTT
 
-*DO NOT RUN THIS IN A CONDA OR VIRTUAL ENVIRONMENT WITH SEPARATE PYTHON BINARY, THE PYTHON BINARY HAS TO BE THAT OF YOUR NATIVE OS INSTALLATION*
-
 As simple ASR client for linux capturing audio from a local microphone using
 gstreamer. The audio is analyzed using the [Silero Voice Activation
 Detector](https://github.com/snakers4/silero-vad) (VAD). Identified segments
@@ -13,13 +11,21 @@ are send to a MQTT topic, so this client requires a running MQTT broker. For thi
 
 # Installation
 
-These installation instructions are tested on Ubuntu 22.04. Install python bindings for the gstreamer libraries, and the MQTT broker:
+## Ubuntu 22.04
+
+These installation instructions are tested on Ubuntu 22.04, and do not require a virtual environment like venv or conda. Install python bindings for the gstreamer libraries, and the MQTT broker:
 
 ```
 sudo apt install libgirepository1.0-dev python3-gst-1.0 libcairo2-dev mosquitto python3-pip git
 
-
 pip install -r requirements.txt
+```
+
+After the installation, libcairo-dev and its dependencies can be removed:
+
+```
+sudo apt remove libcairo2-dev
+sudo apt autoremove
 ```
 
 - Download the VAD model and the Faster Whisper models (large-v2 by default)
@@ -28,6 +34,21 @@ pip install -r requirements.txt
 ```commandline
 download-models.sh <optional-list-of-whisper-model-sizes>
 ```
+
+## Ubuntu 24.04
+
+Due to some changes in pip, the following setup is proposed. First install miniconda or conda according to the installation instructions given on their website.
+
+Install the system packages as for 22.04. Instead of the simple `pip install`
+above, do the following
+
+```
+conda create -n whisper python=3.10 pip=22
+conda activate whisper
+pip install -r requirements.txt
+```
+
+## After package installation
 
 Maybe you have to adapt the pipeline in `local_de_config.yaml`, or the language, the current default expects a ReSpeaker as default PulseAudio device. For the ReSpeaker, use the multichannel, not the analog-stereo.monoto device! You can check your local audio device configuration with
 
