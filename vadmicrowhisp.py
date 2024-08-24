@@ -38,8 +38,12 @@ def int_or_str(text):
     except ValueError:
         return text
 
-def current_milli_time():
+def current_milli_time(audio_time):
     return round(time.time() * 1000)
+
+def audio_milli_time(audio_time):
+    """ audio time is processed audio in seconds """
+    return round(audio_time * 1000)
 
 def init_jit_model(model_path: str, device=torch.device('cpu')):
     torch.set_grad_enabled(False)
@@ -89,7 +93,7 @@ class WhisperMicroServer():
     MIN_SILENCE_DETECTS = 30
     BUFFER_SIZE = 512
 
-    def __init__(self, config):
+    def __init__(self, config, micro=True):
         self.pid = "whisperasr"
         self.audio_dir = "audio/"
         self.language = "de"
@@ -100,9 +104,21 @@ class WhisperMicroServer():
         self.asr_sample_rate = 16000
         self.buffers_queued = 6
 
+        if micro:
+            self.timestamp_fn = current_milli_time
+            self.audio_queue = asyncio.Queue()
+        else:
+            self.timestamp_fn = audio_milli_time
+            self.audio_queue = asyncio.Queue(maxsize=1)
+
+        self.loop = None
+        self.is_running = True
+
         self.config = config
         if 'asr_sample_rate' in config:
             self.asr_sample_rate = config['asr_sample_rate']
+        if 'sample_rate' in config:
+            self.sample_rate = config['sample_rate']
         if 'channels' in config:
             self.channels = config['channels']
         if 'use_channel' in config:
@@ -116,11 +132,10 @@ class WhisperMicroServer():
         self.topic = self.pid + '/asrresult'
         if self.language:
             self.topic += '/' + self.language
-        self.loop = asyncio.get_running_loop()
-        self.audio_queue = asyncio.Queue()
+        self.transcription_queue = queue.Queue()
         self.__init_mqtt_client()
         # create 100 ms buffer with silence (2 bytes per sample): / 1000 * 100
-        self.silence_buffer = bytearray(int(1000 * 2 * (self.asr_sample_rate / 1000)))
+        self.silence_buffer = bytearray(WhisperMicroServer.BUFFER_SIZE * (self.buffers_queued + 1))
         # load silero VAD model
         model = init_jit_model(model_path='silero_vad.jit')
 
@@ -165,8 +180,6 @@ class WhisperMicroServer():
         logger.info("Whisper model initialized")
 
     def __init_transcription_thread(self):
-        self.transcription_queue = queue.Queue()
-
         logger.info("start transcription thread...")
         self.transcribe_thread = Thread(target=self.transcribe, daemon=True)
         self.transcribe_thread.start()
@@ -178,7 +191,7 @@ class WhisperMicroServer():
         # self.client.on_connect = self.__on_mqtt_connect
 
     def wav_filename(self):
-        return self.audio_dir + 'chunk-%d.wav' % (time.time())
+        return self.audio_dir + 'chunk-%d.wav' % current_milli_time(0)
 
     def open_wave_file(self, path, sample_rate):
         """Opens a .wav file.
@@ -190,8 +203,8 @@ class WhisperMicroServer():
         wf.setframerate(sample_rate)
         return wf
 
-    def asrmon_filename(self):
-        return self.audio_dir + 'asrmon-%d.wav' % (time.time())
+    def asrmon_filename(self, suffix):
+        return self.audio_dir + 'asrmon-%d.wav' % suffix
 
     def open_asrmon_file(self, path):
         """Opens a .wav file.
@@ -264,13 +277,14 @@ class WhisperMicroServer():
 
     async def audio_loop(self):
         logger.info(f'sample_rate: {self.asr_sample_rate}')
-        is_voice = None
+        is_voice = -1
         window_size_samples = WhisperMicroServer.BUFFER_SIZE
         framesqueued = window_size_samples * self.buffers_queued
         voice_buffers = [0] * framesqueued
         out_buffer = []
-        while True:
-            while len(voice_buffers) < window_size_samples + framesqueued:
+        audio_time = 0.0
+        while self.is_running or not self.audio_queue.empty():
+            if len(voice_buffers) < window_size_samples + framesqueued:
                 # this is a byte buffer
                 audio = await self.audio_queue.get()
                 frame = np.frombuffer(audio, dtype=np.int16)
@@ -278,71 +292,75 @@ class WhisperMicroServer():
                 if self.am:
                     self.am.writeframes(audio)
                 # data will be self.sample_rate, mono, np.int16 ndarray
-                #data = self.resample(frame, self.channels, self.sample_rate)
+                frame = self.resample(frame, self.channels, self.sample_rate)
                 #print('d', np.shape(data))
                 #print('vb1', len(voice_buffers))
                 voice_buffers.extend(frame.tolist())
+                if len(voice_buffers) < window_size_samples + framesqueued:
+                    continue
 
             ichunk = voice_buffers[framesqueued:framesqueued + window_size_samples]
             chunk = np.array(ichunk, dtype=np.int16)
             vadbuf = chunk / 32768
             speech_dict = self.vad_iterator(vadbuf, return_seconds=True)
+            audio_time += len(ichunk) / self.asr_sample_rate
             if speech_dict:
                 #print(f'{speech_dict}')
                 if "start" in speech_dict:
-                    is_voice = current_milli_time()
+                    # arg ist processed time in milliseconds
+                    is_voice = self.timestamp_fn(audio_time)
                     print('<', end='', flush=True)
                     # monitor what is sent to the ASR
                     if "monitor_asr" in self.config:
                         self.wf = self.open_wave_file(
-                        self.asrmon_filename(), self.asr_sample_rate)
+                        self.asrmon_filename(is_voice), self.asr_sample_rate)
                     # add queued buffers to the outbuffer
                     out_buffer = voice_buffers[:framesqueued]
                     audiodata = np.array(out_buffer, dtype=np.int16).tobytes()
                     self.writeframes(audiodata)
                 elif "end" in speech_dict:
-                    if not is_voice:
+                    if is_voice < 0:
                         print('VAD end ignored')
                         break
-                    voice_start = is_voice
-                    is_voice = None
                     print('>', end='', flush=True)
                     self.writeframes(chunk.tobytes())
                     self.writeframes(self.silence_buffer)
                     out_buffer.extend(ichunk)
                     self.transcription_queue.put(
-                        (out_buffer, voice_start, current_milli_time()))
+                        (out_buffer, is_voice, self.timestamp_fn(audio_time)))
+                    is_voice = -1
                     out_buffer = []
                     if self.wf:
                         self.wf.close()
                         self.wf = None
             voice_buffers = voice_buffers[window_size_samples:]
-            if is_voice:
+            if is_voice >= 0:
                 self.writeframes(chunk.tobytes())
                 out_buffer.extend(ichunk)
 
 
     async def run_micro(self):
+        self.loop = asyncio.get_running_loop()
         cb = lambda inp, frames: self.callback(inp, frames, None, None)
         pipeline = self.config["pipeline"] if "pipeline" in self.config \
             else gm.PIPELINE
         try:
-            with gm.GstreamerMicroSink(callback=cb, pipeline_spec=pipeline) \
-                 as device:
-                if "monitor_mic" in self.config:
-                    self.am = self.open_wave_file(self.wav_filename(),
-                                                  self.sample_rate)
+            device = gm.GstreamerMicroSink(callback=cb, pipeline_spec=pipeline)
+            device.start()
+            if "monitor_mic" in self.config:
+                self.am = self.open_wave_file(self.wav_filename(),
+                                              self.sample_rate)
 
-                print("Connecting to MQTT broker")
-                self.mqtt_connect()
-                await self.audio_loop()
+            print("Connecting to MQTT broker")
+            self.mqtt_connect()
+            await self.audio_loop()
         finally:
             print('Disconnecting...')
             if self.am:
                 self.am.close()
             self.mqtt_disconnect()
 
-async def main(args):
+def main(args):
     #if len(args) < 1:
     #    sys.stderr.write('Usage: %s <config.yaml> [audio_file(s)]\n' % args[0])
     #    sys.exit(1)
@@ -358,7 +376,7 @@ async def main(args):
     ms = WhisperMicroServer(config)
 
     logging.basicConfig(level=logging.INFO)
-    await ms.run_micro()
+    asyncio.run(ms.run_micro())
 
 if __name__ == '__main__':
-    asyncio.run(main(sys.argv[1:]))
+    main(sys.argv[1:])
