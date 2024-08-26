@@ -1,0 +1,1 @@
+ct2-transformers-converter --model sanchit-gandhi/distil-whisper-large-v3-de-kd --output_dir distil-whisper-large-v3-de-kd-ct2 --copy_files tokenizer.json preprocessor_config.json
