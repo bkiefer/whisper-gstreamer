@@ -13,6 +13,7 @@ import torch
 import resampy
 import numpy as np
 import queue
+import traceback
 from threading import Thread
 
 from faster_whisper import WhisperModel
@@ -33,7 +34,6 @@ logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
 
-
 def int_or_str(text):
     """Helper function for argument parsing."""
     try:
@@ -41,18 +41,24 @@ def int_or_str(text):
     except ValueError:
         return text
 
+
 def current_milli_time(audio_time):
+    """The audio_time argument is deliberately ignored!"""
     return round(time.time() * 1000)
+
 
 def audio_milli_time(audio_time):
     """ audio time is processed audio in seconds """
     return round(audio_time * 1000)
 
+
 def init_jit_model(model_path: str, device=torch.device('cpu')):
+    logger.info("Init VAD model")
     torch.set_grad_enabled(False)
     model = torch.jit.load(model_path, map_location=device)
     model.eval()
     return model
+
 
 def isinstance_namedtuple(obj):
     return (
@@ -60,6 +66,7 @@ def isinstance_namedtuple(obj):
             hasattr(obj, '_asdict') and
             hasattr(obj, '_fields')
     )
+
 
 def named_tupel_to_dictionary(tupel):
     """
@@ -89,8 +96,18 @@ def named_tupel_to_dictionary(tupel):
             result_dict[key] = value
     return result_dict
 
-class WhisperMicroServer():
 
+def open_wave_file(path, sample_rate, channels):
+    """ Monitor input to .wav file, Takes path, sample rate, an no. channels
+    """
+    wf = wave.open(path, 'wb')
+    wf.setnchannels(channels)
+    wf.setsampwidth(2)
+    wf.setframerate(sample_rate)
+    return wf
+
+
+class WhisperMicroServer():
     MAX_BUF_RETENTION = 40
     MIN_SPEECH_DETECTS = 3
     MIN_SILENCE_DETECTS = 30
@@ -136,11 +153,13 @@ class WhisperMicroServer():
         if self.language:
             self.topic += '/' + self.language
         self.transcription_queue = queue.Queue(maxsize=1000)
+        self.prompt = ''
         self.client = None
         self.transcription_file = transcription_file
         self.__init_mqtt_client()
         # create 100 ms buffer with silence (2 bytes per sample): / 1000 * 100
-        self.silence_buffer = bytearray(WhisperMicroServer.BUFFER_SIZE * (self.buffers_queued + 1))
+        self.silence_buffer = bytearray(WhisperMicroServer.BUFFER_SIZE *
+                                        (self.buffers_queued + 1))
         # load silero VAD model
         model = init_jit_model(model_path='silero_vad.jit')
 
@@ -196,30 +215,10 @@ class WhisperMicroServer():
         # self.client.on_connect = self.__on_mqtt_connect
 
     def wav_filename(self):
-        return self.audio_dir + 'chunk-%d.wav' % current_milli_time(0)
-
-    def open_wave_file(self, path, sample_rate):
-        """Opens a .wav file.
-        Takes path, number of channels and sample rate.
-        """
-        wf = wave.open(path, 'wb')
-        wf.setnchannels(self.channels)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        return wf
+        return self.audio_dir + f'source-{current_milli_time(0):014d}.wav'
 
     def asrmon_filename(self, suffix):
-        return self.audio_dir + 'asrmon-%d.wav' % suffix
-
-    def open_asrmon_file(self, path):
-        """Opens a .wav file.
-        Takes path, number of channels and sample rate.
-        """
-        am = wave.open(path, 'wb')
-        am.setnchannels(1)
-        am.setsampwidth(2)
-        am.setframerate(self.asr_sample_rate)
-        return am
+        return self.audio_dir + f'chunk-{suffix:014}.wav'
 
     def writeframes(self, audio):
         if self.wf:
@@ -262,11 +261,10 @@ class WhisperMicroServer():
             trans['text'] = text.strip()
             self.transcription_file.writerow(trans)
 
-
     def transcribe(self):
         """
-        Monitor transcription queue for incoming audio to be transcribed either with local or remote Whisper and add
-        resulting transcriptions to result list
+        Monitor transcription queue for incoming audio to be transcribed with
+        local Whisper and add resulting transcriptions to result list
         :return:
         """
 
@@ -274,8 +272,11 @@ class WhisperMicroServer():
             # this call blocks until an element can be retrieved from queue
             audio_segment, start, end = self.transcription_queue.get()
             conv_params = self.config['whisper_transcription']
+            if 'initial_prompt' not in conv_params and self.prompt:
+                conv_params['initial_prompt'] = self.prompt
             try:
-                segments, info = self.whisper_model.transcribe(np.array(audio_segment), **conv_params)
+                segments, info = self.whisper_model.transcribe(
+                    np.array(audio_segment), **conv_params)
                 logger.info("transcribing...")
                 transcripts = []
                 for segment in segments:
@@ -285,14 +286,14 @@ class WhisperMicroServer():
                     transcripts.append(conv_dict)
                 res = {'info': named_tupel_to_dictionary(info),
                        'segments': transcripts,
-                       'start':start, 'end':end }
+                       'start': start, 'end': end}
                 self.send_transcription(res)
-            except:
+            except Exception as ex:
+                logger.error('whisper exception: {}'.format(ex))
                 del self.whisper_model.model
                 del self.whisper_model
                 self.__init_whisper()
         logger.info("Leaving transcribe")
-
 
     async def audio_loop(self):
         logger.info(f'sample_rate: {self.asr_sample_rate}')
@@ -331,8 +332,10 @@ class WhisperMicroServer():
                     print('<', end='', flush=True)
                     # monitor what is sent to the ASR
                     if "monitor_asr" in self.config:
-                        self.wf = self.open_wave_file(
-                        self.asrmon_filename(is_voice), self.asr_sample_rate)
+                        # Always mono
+                        self.wf = open_wave_file(
+                            self.asrmon_filename(is_voice),
+                            self.asr_sample_rate, 1)
                     # add queued buffers to the outbuffer
                     out_buffer = voice_buffers[:framesqueued]
                     audiodata = np.array(out_buffer, dtype=np.int16).tobytes()
@@ -358,18 +361,20 @@ class WhisperMicroServer():
                 out_buffer.extend(ichunk)
         logger.info("Leaving audio_loop")
 
+    def cb(self, inp, frames):
+        self.callback(inp, frames, None, None)
 
     async def run_micro(self):
         self.loop = asyncio.get_running_loop()
-        cb = lambda inp, frames: self.callback(inp, frames, None, None)
         pipeline = self.config["pipeline"] if "pipeline" in self.config \
             else gm.PIPELINE
         try:
-            self.device = gm.GstreamerMicroSink(callback=cb, pipeline_spec=pipeline)
+            self.device = gm.GstreamerMicroSink(callback=self.cb,
+                                                pipeline_spec=pipeline)
             self.device.start()
             if "monitor_mic" in self.config:
-                self.am = self.open_wave_file(self.wav_filename(),
-                                              self.sample_rate)
+                self.am = open_wave_file(self.wav_filename(),
+                                         self.sample_rate, self.channels)
 
             print("Connecting to MQTT broker")
             self.mqtt_connect()
@@ -386,7 +391,7 @@ class WhisperMicroServer():
         self.device.stop()
 
     async def read_file(self, wf):
-        buffer_size = int(self.sample_rate * 0.2) # 0.2 seconds of audio
+        buffer_size = int(self.sample_rate * 0.2)  # 0.2 seconds of audio
         while self.is_running:
             data = wf.readframes(buffer_size)
             if len(data) == 0:
@@ -396,8 +401,8 @@ class WhisperMicroServer():
                 await self.audio_queue.put(data)
 
     async def read_file_and_monitor(self, wf):
-        with self.open_wave_file(self.wav_filename(), self.sample_rate) \
-            as self.am:
+        with open_wave_file(self.wav_filename(), self.sample_rate,
+                            self.channels) as self.am:
             await self.read_file(wf)
 
     async def run_file(self, wf):
@@ -409,8 +414,9 @@ class WhisperMicroServer():
         logger.info("Leaving run_file")
         self.transcribe_thread.join()
 
+
 async def process_files(config_file, files, output_dir):
-    config = load_config(config_file);
+    config = load_config(config_file)
     for file in files:
         filename = os.path.splitext(os.path.basename(file))[0]
         root = output_dir if output_dir else os.path.dirname(file)
@@ -428,22 +434,22 @@ async def process_files(config_file, files, output_dir):
                 writer.writeheader()
                 channels = wf.getnchannels()
                 sample_rate = wf.getframerate()
-                buffer_size = int(sample_rate * 0.2) # 0.2 seconds of audio
-                config['monitor_mic'] = True
-                config['monitor_asr'] = True
+                # buffer_size = int(sample_rate * 0.2) # 0.2 seconds of audio
+                # config['monitor_mic'] = True
+                # config['monitor_asr'] = True
                 config['sample_rate'] = sample_rate
                 config['channels'] = channels
                 config['audio_dir'] = outdir + os.sep
-                ms = WhisperMicroServer(config, micro=False, transcription_file=writer)
+                ms = WhisperMicroServer(config, micro=False,
+                                        transcription_file=writer)
                 await ms.run_file(wf)
     logger.info("Leave process_files")
-
-
 
 
 def load_config(file):
     with open(file, 'r') as f:
         return yaml.safe_load(f)
+
 
 def main(config_file):
     #if len(args) < 1:
@@ -456,16 +462,21 @@ def main(config_file):
     logging.basicConfig(level=logging.INFO)
     try:
         asyncio.run(ms.run_micro())
-    except:
+    except Exception as ex:
+        logger.error("Exception: " + str(ex))
+        traceback.print_exc()
         ms.stop()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-         prog='Whisper Server',
-         description='Listen to microphone and transcribe input or analyse a set of files',
-         epilog='')
-    parser.add_argument("-c", "--config", metavar='config', type=str, required=True, help='config file')
-    parser.add_argument("-o", "--output-dir", metavar='output_dir', type=str, required=False, help='output directory for chunks')
+        prog='Whisper Server',
+        description='Listen to microphone and transcribe input or analyse a set of files',
+        epilog='')
+    parser.add_argument("-c", "--config", metavar='config', type=str,
+                        required=True, help='config file')
+    parser.add_argument("-o", "--output-dir", metavar='output_dir', type=str,
+                        required=False, help='output directory for chunks')
     parser.add_argument('files', metavar='files', type=str, nargs='*')
     args = parser.parse_args()
 

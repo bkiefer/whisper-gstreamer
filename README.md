@@ -35,15 +35,16 @@ sudo apt autoremove
 download-models.sh <optional-list-of-whisper-model-sizes>
 ```
 
-## Ubuntu 24.04
+## Ubuntu 24.04 and 24.10
 
 Due to some changes in pip, the following setup is proposed. First install miniconda or conda according to the installation instructions given on their website.
 
-Install the system packages as for 22.04. Instead of the simple `pip install`
-above, do the following
+Due to changes in package installation policies, installation is slightly different:
 
 ```
-conda create -n whisper python=3.10 pip=22
+sudo apt install libgirepository1.0-dev python3-gst-1.0 libcairo2-dev mosquitto git
+
+conda create -n whisper python=3.12 pip
 conda activate whisper
 pip install -r requirements.txt
 ```
