@@ -72,3 +72,19 @@ Check the content of gstmicpipeline.py in case of problems. In the audio directo
 ```
 
 The ASR result will be send to the `whisperasr/asrresult/<lang>` MQTT topic.
+
+# Docker ASR server
+
+To build a server docker image from this project, use the
+
+    ./build_docker.sh
+
+shell script. This will *not* include the ASR models, which have to be provided from the outside, as well as the configuration file. In the configuration file, the used model can be given, which allows to use different models easily, and also different containers with different models.
+
+To run the dockerized version, use
+
+    ./run_docker.sh <your_config.yml>
+
+Be aware that this requires an MQTT broker that is running and accessible on the host system. The mosquitto service on a Linux system, for example, by default only accepts connections from localhost. To change that behaviour, you can create a file `10-externalconn.conf` in the directory `/etc/mosquitto/conf.d` with the following content:
+
+    listener 1883 0.0.0.0

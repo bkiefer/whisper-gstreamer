@@ -2,6 +2,7 @@ FROM ubuntu:24.04
 
 ENV TZ=Europe/Berlin
 RUN apt-get update \
+    && apt-get upgrade \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     --no-install-recommends \
     libgstreamer1.0-dev \
@@ -25,5 +26,6 @@ COPY run_whisper.sh /app
 COPY requirements.txt /app
 
 RUN pip3 install --break-system-packages -r /app/requirements.txt
+RUN rm -rf /root/.cache/pip
 
 CMD ["/bin/bash", "-c", "./run_whisper.sh -c config.cfg"]

@@ -2,11 +2,18 @@
 scrdir=`dirname $0`
 
 if test -z "$ops_dir"; then
-    ops_dir=$(dirname $(find $CONDA_PREFIX -name libcudnn_ops_infer.so\*))
+    if test -n "$CONDA_PREFIX"; then
+        pref="$CONDA_PREFIX"
+    else
+        pref="/usr"
+    fi
+    ops_dir=$(find "$pref" -name libcudnn_ops_infer.so\*)
     if test -z "$ops_dir"; then
         echo "libcudnn_ops_infer not found, you may have to set it in this script"
+    else
+        ops_dir=$(dirname "$ops_dir")
     fi
 fi
 LD_LIBRARY_PATH="$ops_dir"
 export LD_LIBRARY_PATH
-python $scrdir/vadmicrowhisp.py "$@"
+python3 $scrdir/vadmicrowhisp.py "$@"
