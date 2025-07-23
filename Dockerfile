@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM ubuntu:25.04
 
 ENV TZ=Europe/Berlin
 RUN apt-get update \

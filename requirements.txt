@@ -1,7 +1,8 @@
 pyyaml>=6.0
 resampy>=0.4.3
 paho-mqtt>=2.1.0
-PyGObject>=3.48.2
-ctranslate2<4.5.0
-faster-whisper==1.0.3
-torch>=2.3.0, <2.4
+PyGObject>=3.48.1
+ctranslate2>=4.6.0
+faster-whisper==1.1.1
+torch>=2.7.0
+requests>=2.32

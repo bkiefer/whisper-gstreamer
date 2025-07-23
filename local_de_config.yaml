@@ -6,10 +6,12 @@ language: de
 # adaptation_state_infile="state"
 # adaptation_state_outfile="state"
 
-monitor_mic: true
-monitor_asr: true
+#monitor_mic: true
+monitor_mic: false
+#monitor_asr: tru
+monitor_asr: false
 
-# Address of MQTT broker
+# Address of MQTT broker, change do host.docker.internal for docker use
 mqtt_address: localhost
 
 # List the pulseaudio devices with this command:
@@ -34,7 +36,6 @@ whisper:
   #model_size: large-v2
   device: gpu
   compute_type: float32
-#  language: de
 #  task: null
 #  initial_prompt: ''
 #  prefix: ''
@@ -44,10 +45,10 @@ vad:
   min_silence_duration_ms: 300
 #  speech_pad_ms: 50
 
-# whisper_transcription:
-#   language: de_DE
+whisper_transcription:
+    language: de
 #   task: asr
-#   initial_prompt: ""
+#    initial_prompt: 'Andreas,Benno,Bodenoperator 1,Bodenoperator 2,Bodenroboter 2,Daniel,Dirk,Drohne,Drohnenoperator,Einsatzleiter,Lena,Markus,Mission Commander,Mission Operator,Operator 1,Operator 2,Operator Boden 1,Operator Boden 2,Operator UAV,Sven,Teamleader,Teamleiter,Teamleiter 1,Thorsten,UAV,UAV 1,UAV Drohne,UAV Operator,UGV 1,UGV 2,Feuerwehr Bochum,kommen,hört,höre'
 #   prefix: ""
 #   prepend_punctuations: ''
 #   append_punctuations: ".?"
@@ -63,7 +64,7 @@ vad:
 #   suppress_blank: true
 #   without_timestamps: true
 #   word_timestamps: false
-#   vad_filter: false
+    vad_filter: false
 #   # float list
 #   temperature: 0.0, 1.0
 #   # string list
