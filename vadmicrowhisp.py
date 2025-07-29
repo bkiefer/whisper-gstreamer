@@ -2,6 +2,7 @@
 
 import sys
 import os
+from pathlib import Path
 import argparse
 import csv
 import asyncio
@@ -34,6 +35,8 @@ logging.basicConfig(
     level=logging.INFO)
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
+
+scrroot = None
 
 # enable debugging at httplib level (requests->urllib3->http.client)
 # You will see the REQUEST, including HEADERS and DATA, and RESPONSE
@@ -169,7 +172,7 @@ class WhisperMicroServer():
         self.silence_buffer = bytearray(WhisperMicroServer.BUFFER_SIZE *
                                         (self.buffers_queued + 1))
         # load silero VAD model
-        model = init_jit_model(model_path='silero_vad.jit')
+        model = init_jit_model(model_path = scrroot / 'silero_vad.jit')
 
         vad_config = config['vad'] if 'vad' in config else dict()
         #print(type(vad_config['threshold']))
@@ -207,8 +210,8 @@ class WhisperMicroServer():
         logger.info(
             f"initializing {whisper_config['model_size']} model "
             f"for {whisper_config['device']} {whisper_config['compute_type']} ...")
-        model_path = "./whisper-models/" + whisper_config['model_size'] + '/'
-        self.whisper_model = WhisperModel(model_path,
+        model_path = scrroot / "whisper-models" / whisper_config['model_size']
+        self.whisper_model = WhisperModel(str(model_path) + '/',
                                           device=whisper_config['device'],
                                           compute_type=whisper_config['compute_type'])
         logger.info("Whisper model initialized")
@@ -561,7 +564,7 @@ if __name__ == '__main__':
                         required=False, help='send mqtt messages in batch processing')
     parser.add_argument('files', metavar='files', type=str, nargs='*')
     args = parser.parse_args()
-
+    scrroot = Path(sys.argv[0]).parent
     if (args.files):
         process_files(args.config, args.files, args.output_dir, args.mqtt)
     else:
