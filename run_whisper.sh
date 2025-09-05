@@ -4,7 +4,9 @@ scrdir=`dirname $0`
 
 if test -z "$ops_dir"; then
     if test -z "$pref"; then
-        if test -n "$CONDA_PREFIX"; then
+        if test -d ".venv"; then
+            pref=".venv"
+        elif test -n "$CONDA_PREFIX"; then
             pref="$CONDA_PREFIX"
         else
             pref="/usr"
@@ -19,4 +21,4 @@ if test -z "$ops_dir"; then
 fi
 LD_LIBRARY_PATH="$ops_dir"
 export LD_LIBRARY_PATH
-python3 $scrdir/vadmicrowhisp.py "$@"
+python3 -u $scrdir/vadmicrowhisp.py "$@"

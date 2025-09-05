@@ -36,7 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
-scrroot = None
+scrroot = Path('.')
 
 # enable debugging at httplib level (requests->urllib3->http.client)
 # You will see the REQUEST, including HEADERS and DATA, and RESPONSE
@@ -51,7 +51,7 @@ scrroot = None
 # requests_log.propagate = True
 
 def int_or_str(text):
-    """Helper function for argument parsing."""
+    """Try to convert to int, return original object if not possible."""
     try:
         return int(text)
     except ValueError:
@@ -59,7 +59,10 @@ def int_or_str(text):
 
 
 def current_milli_time(audio_time):
-    """The audio_time argument is deliberately ignored!"""
+    """Return current (unix) time in milliseconds.
+
+    The audio_time argument is deliberately ignored.
+    """
     return round(time.time() * 1000)
 
 
@@ -172,7 +175,7 @@ class WhisperMicroServer():
         self.silence_buffer = bytearray(WhisperMicroServer.BUFFER_SIZE *
                                         (self.buffers_queued + 1))
         # load silero VAD model
-        model = init_jit_model(model_path = scrroot / 'silero_vad.jit')
+        model = init_jit_model(model_path=scrroot/'models'/'silero_vad.jit')
 
         vad_config = config['vad'] if 'vad' in config else dict()
         #print(type(vad_config['threshold']))
@@ -210,7 +213,7 @@ class WhisperMicroServer():
         logger.info(
             f"initializing {whisper_config['model_size']} model "
             f"for {whisper_config['device']} {whisper_config['compute_type']} ...")
-        model_path = scrroot / "whisper-models" / whisper_config['model_size']
+        model_path = scrroot / 'models' / 'whisper' / whisper_config['model_size']
         self.whisper_model = WhisperModel(str(model_path) + '/',
                                           device=whisper_config['device'],
                                           compute_type=whisper_config['compute_type'])
