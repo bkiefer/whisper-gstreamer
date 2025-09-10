@@ -18,12 +18,12 @@ These installation instructions are tested on Ubuntu 22.04, 24.04 and 25.04, and
 Install python bindings for the gstreamer libraries, and the MQTT broker:
 
 ```
-sudo apt install libgirepository1.0-dev libgirepository2.0-dev python3-gst-1.0 libcairo2-dev mosquitto git
+sudo apt install libgirepository2.0-dev python3-gst-1.0 libcairo2-dev mosquitto git
 
 uv sync
 ```
 
-After the installation, libcairo-dev and its dependencies can be removed:
+After the installation, libcairo-dev and its dependencies *can* be removed:
 
 ```
 sudo apt remove libcairo2-dev

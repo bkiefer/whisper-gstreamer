@@ -4,5 +4,5 @@ paho-mqtt>=2.1.0
 PyGObject>=3.48.1
 ctranslate2>=4.6.0
 faster-whisper==1.1.1
-torch>=2.7.0
+torch>=2.8.0
 requests>=2.32

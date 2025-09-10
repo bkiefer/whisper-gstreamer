@@ -33,8 +33,8 @@ pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=6,rate={} ! deinterleave
 asr_sample_rate: 16000
 
 whisper:
-  model_size: distil-whisper-large-v3-de-kd-ct2
-  #model_size: large-v2
+  # model_size: distil-whisper-large-v3-de-kd-ct2
+  model_size: large-v3-turbo
   device: gpu
   compute_type: float32
 #  task: null
