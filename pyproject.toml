@@ -1,7 +1,7 @@
 [project]
 name = "whisper-gstreamer"
 version = "0.1.0"
-description = "Add your description here"
+description = "A package to transcribe microphone or file input using whisper"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,5 +12,5 @@ dependencies = [
     "pyyaml>=6.0",
     "requests>=2.32",
     "resampy>=0.4.3",
-    "torch>=2.7.0",
+    "torch>=2.8.0",
 ]
