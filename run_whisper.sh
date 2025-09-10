@@ -21,4 +21,4 @@ if test -z "$ops_dir"; then
 fi
 LD_LIBRARY_PATH="$ops_dir"
 export LD_LIBRARY_PATH
-python3 -u $scrdir/vadmicrowhisp.py "$@"
+python3 -u $scrdir/transcriptor.py "$@"

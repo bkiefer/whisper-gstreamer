@@ -29,6 +29,7 @@ import gstmicpipeline as gm
 
 from vad_iterator import VADIterator
 
+
 # configure logger
 logging.basicConfig(
     format="%(asctime)s: %(levelname)s: %(message)s",
@@ -36,7 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
-scrroot = Path('.')
+modroot = Path('.') / 'models'
 
 # enable debugging at httplib level (requests->urllib3->http.client)
 # You will see the REQUEST, including HEADERS and DATA, and RESPONSE
@@ -50,6 +51,7 @@ scrroot = Path('.')
 # requests_log.setLevel(logging.DEBUG)
 # requests_log.propagate = True
 
+
 def int_or_str(text):
     """Try to convert to int, return original object if not possible."""
     try:
@@ -59,15 +61,16 @@ def int_or_str(text):
 
 
 def current_milli_time(audio_time):
-    """Return current (unix) time in milliseconds.
+    """
+    Return the unix time in milliseconds.
 
-    The audio_time argument is deliberately ignored.
+    The audio_time argument is deliberately ignored!
     """
     return round(time.time() * 1000)
 
 
 def audio_milli_time(audio_time):
-    """ audio time is processed audio in seconds """
+    """Audio time is processed audio in seconds."""
     return round(audio_time * 1000)
 
 
@@ -81,10 +84,12 @@ def init_jit_model(model_path: str, device=torch.device('cpu')):
 
 def named_tupel_to_dictionary(tupel):
     """
-    Convert a named tuple into a dictionary. Use nested dictionaries if tuple value is another tupel.
+    Convert a named tuple into a dictionary. Use nested dictionaries if tuple
+    value is another tupel.
     :param tupel: named tupel
     :return: named tupel converted into dictionary
     """
+
     result_dict = {}
     for key, value in asdict(tupel).items():
         if is_dataclass(value):
@@ -109,7 +114,7 @@ def named_tupel_to_dictionary(tupel):
 
 
 def open_wave_file(path, sample_rate, channels):
-    """ Monitor input to .wav file, Takes path, sample rate, an no. channels
+    """ Monitor input to .wav file, Takes path, sample rate, an no. channels.
     """
     wf = wave.open(path, 'wb')
     wf.setnchannels(channels)
@@ -175,13 +180,13 @@ class WhisperMicroServer():
         self.silence_buffer = bytearray(WhisperMicroServer.BUFFER_SIZE *
                                         (self.buffers_queued + 1))
         # load silero VAD model
-        model = init_jit_model(model_path=scrroot/'models'/'silero_vad.jit')
+        model = init_jit_model(model_path=modroot / 'silero_vad.jit')
 
         vad_config = config['vad'] if 'vad' in config else dict()
-        #print(type(vad_config['threshold']))
+        # print(type(vad_config['threshold']))
         self.vad_iterator = VADIterator(model, **vad_config)
-        #self.threshold = 0.5
-        #print(f'{self.asr_sample_rate} {self.sample_rate} {self.channels}')
+        # self.threshold = 0.5
+        # print(f'{self.asr_sample_rate} {self.sample_rate} {self.channels}')
 
         self.__init_whisper()
 
@@ -200,21 +205,21 @@ class WhisperMicroServer():
             return   # using remote ASR
         if 'device' not in whisper_config or whisper_config['device'] == 'cpu':
             whisper_config['device'] = 'cpu'
-            if not 'compute_type' in whisper_config:
+            if 'compute_type' not in whisper_config:
                 whisper_config['compute_type'] = 'int16'
         else:
             whisper_config['device'] = 'cuda'
-            if not 'compute_type' in whisper_config:
+            if 'compute_type' not in whisper_config:
                 whisper_config['compute_type'] = 'float32'
         if 'whisper_transcription' not in self.config:
             self.config['whisper_transcription'] = dict()
-        if self.language and not 'language' in self.config['whisper_transcription']:
+        if self.language and 'language' not in self.config['whisper_transcription']:
             self.config['whisper_transcription']['language'] = self.language
         logger.info(
             f"initializing {whisper_config['model_size']} model "
             f"for {whisper_config['device']} {whisper_config['compute_type']} ...")
-        model_path = scrroot / 'models' / 'whisper' / whisper_config['model_size']
-        self.whisper_model = WhisperModel(str(model_path) + '/',
+        model_path = modroot / 'whisper' / whisper_config['model_size']
+        self.whisper_model = WhisperModel(str(model_path),
                                           device=whisper_config['device'],
                                           compute_type=whisper_config['compute_type'])
         logger.info("Whisper model initialized")
@@ -227,8 +232,11 @@ class WhisperMicroServer():
         logger.info("transcription thread running")
 
     def __init_mqtt_client(self):
+        mqtt_config = self.config['mqtt']
         self.client = mqtt.Client(CallbackAPIVersion.VERSION2)
-        # self.client.username_pw_set(self.mqtt_username, self.mqtt_password)
+        if 'username' in mqtt_config and 'password' in mqtt_config:
+            self.client.username_pw_set(mqtt_config['username'],
+                                        mqtt_config['password'])
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.prompt_topic = self.pid + '/set_prompt'
@@ -288,7 +296,12 @@ class WhisperMicroServer():
                                        bytes(indata))
 
     def mqtt_connect(self):
-        self.client.connect(self.config['mqtt_address'])
+        mqtt_config = self.config['mqtt']
+        mqtt_config = {key: mqtt_config[key] for key in
+                       ['host', 'port', 'keepalive',
+                        'bind_address', 'bind_port'
+                        'clean_start'] if key in mqtt_config}
+        self.client.connect(**mqtt_config)
         self.client.loop_start()
 
     def mqtt_disconnect(self):
@@ -311,20 +324,27 @@ class WhisperMicroServer():
                 trans['filename'] = self.inputfile
             self.transcription_file.writerow(trans)
 
+    def transcribe_success(self, result, audio_segment):
+        for segment in result['segments']:
+            logger.info("[%.2fs -> %.2fs] %s"
+                        % (segment['start'], segment['end'], segment['text']))
+        self.send_transcription(result)
+
+
     def transcribe(self):
         """
         Monitor transcription queue for incoming audio to be transcribed with
-        local Whisper and add resulting transcriptions to result list
-        :return:
+        local Whisper and add resulting transcriptions to result list.
         """
 
         while self.is_running or not self.transcription_queue.empty():
             # this call blocks until an element can be retrieved from queue
             audio_segment, start, end = self.transcription_queue.get()
             conv_params = self.config['whisper_transcription']
-            #if 'initial_prompt' not in conv_params and self.prompt:
+            # if 'initial_prompt' not in conv_params and self.prompt:
             if self.initial_prompt:
                 conv_params['initial_prompt'] = self.initial_prompt
+            result = None
             if not self.whisper_url:
                 try:
                     logger.info("now transcribing")
@@ -332,16 +352,11 @@ class WhisperMicroServer():
                     logger.info("transcribing...")
                     transcripts = []
                     for segment in segments:
-                        logger.info("[%.2fs -> %.2fs] %s"
-                                    % (segment.start, segment.end, segment.text))
                         conv_dict = named_tupel_to_dictionary(segment)
                         transcripts.append(conv_dict)
-                    res = {'info': named_tupel_to_dictionary(info),
-                           'segments': transcripts,
-                           'start': start, 'end': end}
-                    #res.update(self.speaker_identification(audio_segment))
-                    self.send_transcription(res)
-
+                    result = {'info': named_tupel_to_dictionary(info),
+                              'segments': transcripts,
+                              'start': start, 'end': end}
                 except Exception as ex:
                     logger.error('whisper exception: {}'.format(ex))
                     traceback.print_exc()
@@ -355,16 +370,12 @@ class WhisperMicroServer():
                                          data=segment.tobytes(),
                                          headers={'Content-Type': 'application/octet-stream'},
                                          params=conv_params)
-                remote_result = response.json()
-                remote_result['start'] = start
-                remote_result['end'] = end
-                #remote_result.update(self.speaker_identification(audio_segment))
-                self.send_transcription(remote_result)
-                if 'segments' in remote_result:
-                    for segment in remote_result['segments']:
-                        logger.info("[%.2fs -> %.2fs] %s"
-                                    % (segment['start'], segment['end'], segment['text']))
+                result = response.json()
+                result['start'] = start
+                result['end'] = end
 
+            if result and 'segments' in result:
+                self.transcribe_success(result, audio_segment)
         logger.info("Leaving transcribe")
 
     def bytes2intlist(self, audio):
@@ -372,8 +383,8 @@ class WhisperMicroServer():
         # monitor what comes in
         # data will be self.sample_rate, mono, np.int16 ndarray
         frame = self.resample(frame, self.channels, self.sample_rate)
-        #print('d', np.shape(data))
-        #print('vb1', len(voice_buffers))
+        # print('d', np.shape(data))
+        # print('vb1', len(voice_buffers))
         return frame.tolist()
 
     async def audio_loop(self):
@@ -401,7 +412,7 @@ class WhisperMicroServer():
             speech_dict = self.vad_iterator(vadbuf, return_seconds=True)
             audio_time += len(ichunk) / self.asr_sample_rate
             if speech_dict:
-                #print(f'{speech_dict}')
+                # print(f'{speech_dict}')
                 if "start" in speech_dict:
                     # arg ist processed time in milliseconds
                     is_voice = self.timestamp_fn(audio_time)
@@ -494,10 +505,10 @@ class WhisperMicroServer():
         if mqtt:
             print("Connecting to MQTT broker")
             self.mqtt_connect()
-        #self.loop = asyncio.get_running_loop()
-        #self.processing = asyncio.create_task(self.audio_loop())
-        #self.processing.add_done_callback(
-        #   lambda t: logger.info("processing loop finished"))
+        # self.loop = asyncio.get_running_loop()
+        # self.processing = asyncio.create_task(self.audio_loop())
+        # self.processing.add_done_callback(
+        #    lambda t: logger.info("processing loop finished"))
         for file in files:
             self.inputfile = os.path.splitext(os.path.basename(file))[0]
             logger.info("Processing {}".format(self.inputfile))
@@ -511,8 +522,7 @@ class WhisperMicroServer():
         self.mqtt_disconnect()
 
 
-
-def process_files(config_file, files, output_dir, mqtt):
+def process_files(server_class, config_file, files, output_dir, mqtt):
     config = load_config(config_file)
     root = output_dir if output_dir else "outputs"
     if root[:-1] != os.sep:
@@ -528,7 +538,7 @@ def process_files(config_file, files, output_dir, mqtt):
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         config['audio_dir'] = outdir + os.sep
-        ms = WhisperMicroServer(config, micro=False, transcription_file=writer)
+        ms = server_class(config, micro=False, transcription_file=writer)
         ms.run(config, files, mqtt)
 
 
@@ -537,38 +547,38 @@ def load_config(file):
         return yaml.safe_load(f)
 
 
-def main(config_file):
-    #if len(args) < 1:
-    #    sys.stderr.write('Usage: %s <config.yaml> [audio_file(s)]\n' % args[0])
-    #    sys.exit(1)
-
-    config = load_config(config_file)
-    ms = WhisperMicroServer(config)
-
-    logging.basicConfig(level=logging.INFO)
-    try:
-        asyncio.run(ms.run_micro())
-    except Exception as ex:
-        logger.error("Exception: " + str(ex))
-        traceback.print_exc()
-        ms.stop()
-
-
-if __name__ == '__main__':
+def main(server_class):
+    global modroot
     parser = argparse.ArgumentParser(
         prog='Whisper Server',
-        description='Listen to microphone and transcribe input or analyse a set of files',
+        description='Listen to microphone and transcribe input ' +
+        'or analyse a set of files',
         epilog='')
     parser.add_argument("-c", "--config", metavar='config', type=str,
                         required=True, help='config file')
     parser.add_argument("-o", "--output-dir", metavar='output_dir', type=str,
                         required=False, help='output directory for chunks')
     parser.add_argument("-m", "--mqtt", action='store_true',
-                        required=False, help='send mqtt messages in batch processing')
+                        required=False,
+                        help='send mqtt messages in batch processing')
     parser.add_argument('files', metavar='files', type=str, nargs='*')
     args = parser.parse_args()
-    scrroot = Path(sys.argv[0]).parent
+    modroot = Path(sys.argv[0]).parent / 'models'
     if (args.files):
-        process_files(args.config, args.files, args.output_dir, args.mqtt)
+        process_files(server_class,
+                      args.config, args.files, args.output_dir, args.mqtt)
     else:
-        main(args.config)
+        config = load_config(args.config)
+        ms = server_class(config)
+
+        logging.basicConfig(level=logging.INFO)
+        try:
+            asyncio.run(ms.run_micro())
+        except Exception as ex:
+            logger.error("Exception: " + str(ex))
+            traceback.print_exc()
+            ms.stop()
+
+
+if __name__ == '__main__':
+    main(WhisperMicroServer)

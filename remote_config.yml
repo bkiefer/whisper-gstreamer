@@ -6,13 +6,13 @@ language: de
 # adaptation_state_infile="state"
 # adaptation_state_outfile="state"
 
-#monitor_mic: true
+
 monitor_mic: false
-#monitor_asr: true
 monitor_asr: false
 
 # Address of MQTT broker
-mqtt_address: host.docker.internal
+mqtt:
+  host: localhost
 
 # List the pulseaudio devices with this command:
 # pacmd list-sources | grep -e 'index:' -e device.string -e 'name:'
@@ -32,13 +32,13 @@ pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=6,rate={} ! deinterleave
 asr_sample_rate: 16000
 
 whisper:
-  model_size: distil-whisper-large-v3-de-kd-ct2
+  #model_size: distil-whisper-large-v3-de-kd-ct2
   #model_size: large-v2
-  device: gpu
-  compute_type: float32
-#  task: null
-#  initial_prompt: ''
-#  prefix: ''
+  #model_size: medium
+  #device: gpu
+  #compute_type: float32
+  #url: http://serv-9211.kl.dfki.de:8080/transcribe
+  url: http://serv-9211.kl.dfki.de:5022/transcribe
 
 vad:
   threshold: 0.3
@@ -48,7 +48,10 @@ vad:
 whisper_transcription:
     language: de
 #   task: asr
-#    initial_prompt: 'Andreas,Benno,Bodenoperator 1,Bodenoperator 2,Bodenroboter 2,Daniel,Dirk,Drohne,Drohnenoperator,Einsatzleiter,Lena,Markus,Mission Commander,Mission Operator,Operator 1,Operator 2,Operator Boden 1,Operator Boden 2,Operator UAV,Sven,Teamleader,Teamleiter,Teamleiter 1,Thorsten,UAV,UAV 1,UAV Drohne,UAV Operator,UGV 1,UGV 2,Feuerwehr Bochum,kommen,hört,höre'
+# 2024_08_Viersen mono-l
+#    initial_prompt: 'Abschnittsleiter, Einsatzleiter, Zugführer, Löschzug, ELW, OG, Zugführerassistent, Einsatzleitung, LF, Führungsassistent, Gruppenführer, TLF'
+#
+#    initial_prompt: ''
 #   prefix: ""
 #   prepend_punctuations: ''
 #   append_punctuations: ".?"

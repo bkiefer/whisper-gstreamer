@@ -1,19 +1,17 @@
 # What's the language of the ASR model (if any, is optional)
 # the language, if set, will be appended to the publishing topic like this:
 #/whisperasr/asrresult/<lang>
-# If unset, it's most likely multilingual, and under asrresult
-language: en
+language: de
 
 # adaptation_state_infile="state"
 # adaptation_state_outfile="state"
 
-# Monitor audio: incoming resp. what's send to the ASR (segmented and possibly
-# resampled)
-monitor_mic: true
-monitor_asr: true
+#monitor_mic: true
+monitor_mic: false
+#monitor_asr: true
+monitor_asr: false
 
 # Address of MQTT broker
-# host.docker.internal is mandatory if you want to use an system MQTT broker
 mqtt:
   host: host.docker.internal
 
@@ -23,22 +21,22 @@ mqtt:
 
 # Sennheiser USB headset, make sure it's the OS/pulse default device
 # This pipeline does the right conversion already
-pipeline: "pulsesrc ! audioconvert ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
+#pipeline: "pulsesrc ! audioconvert ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
 
 # ReSpeaker V2, make sure it's the OS/pulse default device
 # It's the multichannel device!
 # channels: 6, used channel: 0 (combo channel), sample_rate: 16000
 # This pipeline does the right things already
-#pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=6,rate={} ! deinterleave name=d d.src_0 ! appsink name=sink emit_signals=true"
+pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=6,rate={} ! deinterleave name=d d.src_0 ! appsink name=sink emit_signals=true"
 
 # sample rate of the ASR model (currently 8k)
 asr_sample_rate: 16000
 
 whisper:
-  model_size: large-v2
+  model_size: distil-whisper-large-v3-de-kd-ct2
+  #model_size: large-v2
   device: gpu
-#  compute_type: float32
-#  language: de
+  compute_type: float32
 #  task: null
 #  initial_prompt: ''
 #  prefix: ''
@@ -46,16 +44,12 @@ whisper:
 vad:
   threshold: 0.3
   min_silence_duration_ms: 300
-#  min_speech_duration: 500
-#  max_speech_duration_s: 50
-#  max_speech_duration_ms: 5
 #  speech_pad_ms: 50
 
-
-# whisper_transcription:
-#   language: de_DE
+whisper_transcription:
+    language: de
 #   task: asr
-#   initial_prompt: ""
+#    initial_prompt: 'Andreas,Benno,Bodenoperator 1,Bodenoperator 2,Bodenroboter 2,Daniel,Dirk,Drohne,Drohnenoperator,Einsatzleiter,Lena,Markus,Mission Commander,Mission Operator,Operator 1,Operator 2,Operator Boden 1,Operator Boden 2,Operator UAV,Sven,Teamleader,Teamleiter,Teamleiter 1,Thorsten,UAV,UAV 1,UAV Drohne,UAV Operator,UGV 1,UGV 2,Feuerwehr Bochum,kommen,hört,höre'
 #   prefix: ""
 #   prepend_punctuations: ''
 #   append_punctuations: ".?"
@@ -71,7 +65,7 @@ vad:
 #   suppress_blank: true
 #   without_timestamps: true
 #   word_timestamps: false
-#   vad_filter: false
+    vad_filter: false
 #   # float list
 #   temperature: 0.0, 1.0
 #   # string list

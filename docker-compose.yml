@@ -1,0 +1,11 @@
+;; This buffer is for text that is not saved, and for Lisp evaluation.
+;; To create a file, visit it with C-x C-f and enter text in its buffer.
+
+networks:
+  mlt:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.5.0.0/16
+         # host will be reachable with this IP from within containers
+         gateway: 10.5.0.1

@@ -11,14 +11,16 @@ are send to a MQTT topic, so this client requires a running MQTT broker. For thi
 
 # Installation
 
-## Ubuntu 22.04
+## Ubuntu 22.04 or higher
 
-These installation instructions are tested on Ubuntu 22.04, and do not require a virtual environment like venv or conda. Install python bindings for the gstreamer libraries, and the MQTT broker:
+These installation instructions are tested on Ubuntu 22.04, 24.04 and 25.04, and use the `uv` package management system to provide the required python packages. If you don't have it installed yet, check here: [install uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+Install python bindings for the gstreamer libraries, and the MQTT broker:
 
 ```
-sudo apt install libgirepository1.0-dev python3-gst-1.0 libcairo2-dev mosquitto python3-pip git
+sudo apt install libgirepository1.0-dev libgirepository2.0-dev python3-gst-1.0 libcairo2-dev mosquitto git
 
-pip install -r requirements.txt
+uv sync
 ```
 
 After the installation, libcairo-dev and its dependencies can be removed:
@@ -28,30 +30,16 @@ sudo apt remove libcairo2-dev
 sudo apt autoremove
 ```
 
-- Download the VAD model and the Faster Whisper models (large-v2 by default)
+- Download the VAD model and the Faster Whisper models (large-v3-turbo by default)
   (faster whisper from [Huggingface](https://huggingface.co/guillaumekln))
 
 ```commandline
 download-models.sh <optional-list-of-whisper-model-sizes>
 ```
 
-## Ubuntu 24.04 and 24.10
-
-Due to some changes in pip, the following setup is proposed. First install miniconda or conda according to the installation instructions given on their website.
-
-Due to changes in package installation policies, installation is slightly different:
-
-```
-sudo apt install libgirepository1.0-dev python3-gst-1.0 libcairo2-dev mosquitto git
-
-conda create -n whisper python=3.12 pip
-conda activate whisper
-pip install -r requirements.txt
-```
-
 ## After package installation
 
-Maybe you have to adapt the pipeline in `local_de_config.yaml`, or the language, the current default expects a ReSpeaker as default PulseAudio device. For the ReSpeaker, use the multichannel, not the analog-stereo.monoto device! You can check your local audio device configuration with
+Maybe you have to adapt the pipeline in `local_de_config.yml`, or the language, the current default expects a ReSpeaker as default PulseAudio device. For the ReSpeaker, use the multichannel, not the analog-stereo.monoto device! You can check your local audio device configuration with
 
 ```
 pacmd list-sources | grep -e 'index:' -e device.string -e 'name:'
@@ -68,7 +56,7 @@ pacmd set-default-source 'alsa_input.usb-SEEED_ReSpeaker_4_Mic_Array__UAC1.0_-00
 Check the content of gstmicpipeline.py in case of problems. In the audio directory, the microphone audio is stored in asrmon-XX.wav files and the data transferred to the ASR in chunk-XX.wav
 
 ```
-./run_whisper.sh local_de_config.yaml
+./run_whisper.sh local_de_config.yml
 ```
 
 The ASR result will be send to the `whisperasr/asrresult/<lang>` MQTT topic.

@@ -2,10 +2,12 @@
 #set -x
 mkdir audio > /dev/null 2>&1
 
-if test -f silero_vad.jit; then
+if test -f models/silero_vad.jit; then
     :
 else
+    cd models
     wget https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.jit
+    cd ..
 fi
 
 download_models() {
@@ -16,7 +18,7 @@ for model in sys.argv[1:]:
 }
 
 if test -z "$1"; then
-    download_models large-v2
+    download_models large-v3-turbo
 else
     download_models "$*"
 fi
