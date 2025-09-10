@@ -9,9 +9,10 @@ else
 fi
 
 download_models() {
+    mkdir -p models/whisper 2>/dev/null
     python -c "from faster_whisper import utils;import sys
 for model in sys.argv[1:]:
-    utils.download_model(model, output_dir='./whisper-models/' + model)" "$*"
+    utils.download_model(model, output_dir='./models/whisper' + model)" "$*"
 }
 
 if test -z "$1"; then

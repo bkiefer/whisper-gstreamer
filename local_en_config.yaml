@@ -30,7 +30,8 @@ pipeline: "pulsesrc ! audioconvert ! audio/x-raw,format=S16LE,channels=1,rate={}
 asr_sample_rate: 16000
 
 whisper:
-  model_size: large-v2
+  model_size: large-v3-turbo
+  # model_size: medium
   device: gpu
 #  compute_type: float32
 #  language: de
