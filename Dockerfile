@@ -18,13 +18,11 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY vad_iterator.py /app
-COPY gstmicpipeline.py /app
-COPY transcriptor.py /app
-COPY run_whisper.sh /app
 COPY requirements.txt /app
 
 RUN pip3 install --break-system-packages -r /app/requirements.txt
 RUN rm -rf /root/.cache/pip
+COPY src /app/src
+COPY run_whisper.sh /app
 
 CMD ["/bin/bash", "-c", "./run_whisper.sh -c config.cfg"]

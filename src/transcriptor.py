@@ -548,7 +548,6 @@ def load_config(file):
 
 
 def main(server_class):
-    global modroot
     parser = argparse.ArgumentParser(
         prog='Whisper Server',
         description='Listen to microphone and transcribe input ' +
@@ -563,7 +562,6 @@ def main(server_class):
                         help='send mqtt messages in batch processing')
     parser.add_argument('files', metavar='files', type=str, nargs='*')
     args = parser.parse_args()
-    modroot = Path(sys.argv[0]).parent / 'models'
     if (args.files):
         process_files(server_class,
                       args.config, args.files, args.output_dir, args.mqtt)
@@ -581,4 +579,6 @@ def main(server_class):
 
 
 if __name__ == '__main__':
+    # one level up for src/
+    modroot = Path(sys.argv[0]).parent.parent.absolute() / 'models'
     main(WhisperMicroServer)
