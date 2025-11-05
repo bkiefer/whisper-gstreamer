@@ -74,7 +74,7 @@ def audio_milli_time(audio_time):
     return round(audio_time * 1000)
 
 
-def init_jit_model(model_path: str, device=torch.device('cpu')):
+def init_jit_model(model_path: Path, device=torch.device('cpu')):
     logger.info("Init VAD model")
     torch.set_grad_enabled(False)
     model = torch.jit.load(model_path, map_location=device)

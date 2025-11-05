@@ -1,28 +1,26 @@
 FROM ubuntu:25.04
 
 ENV TZ=Europe/Berlin
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get -q -qq update && apt-get upgrade -y
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    --no-install-recommends \
+RUN apt-get install -y --no-install-recommends --fix-missing \
+    git curl ca-certificates \
+    gcc cmake pkg-config libcairo2-dev libgirepository-2.0-dev python3-dev \
     libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
-    gstreamer1.0-plugins-base \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-alsa \
-    gstreamer1.0-pulseaudio \
-    gstreamer1.0-plugins-base-apps \
-    ffmpeg \
-    python3-pip \
-    python3-cairo \
+    gstreamer1.0-pulseaudio gstreamer1.0-alsa \
     python3-gst-1.0 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
+# Download the latest uv installer
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+# Run the installer then remove it
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+# Ensure the installed binary is on the `PATH`
+ENV PATH="/root/.local/bin/:$PATH"
+
 WORKDIR /app
-COPY requirements.txt /app
+RUN git clone https://github.com/bkiefer/whisper-gstreamer /app
+RUN uv sync
 
-RUN pip3 install --break-system-packages -r /app/requirements.txt
-RUN rm -rf /root/.cache/pip
-COPY src /app/src
-COPY run_whisper.sh /app
-
-CMD ["/bin/bash", "-c", "./run_whisper.sh -c config.cfg"]
+CMD ["uv", "run", "./run_whisper.sh", "-c", "config.cfg"]

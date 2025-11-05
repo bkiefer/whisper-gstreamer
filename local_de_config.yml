@@ -8,8 +8,8 @@ language: de
 
 #monitor_mic: true
 monitor_mic: false
-#monitor_asr: tru
-monitor_asr: false
+#monitor_asr: true
+monitor_asr: true
 
 # Address of MQTT broker, change do host.docker.internal for docker use
 mqtt:
