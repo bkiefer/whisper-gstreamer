@@ -29,6 +29,15 @@ mqtt:
 # This pipeline does the right things already
 pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=6,rate={} ! deinterleave name=d d.src_0 ! appsink name=sink emit_signals=true"
 
+# Generic mono input, with gstreamer resampling
+pipeline: "pulsesrc ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
+
+# Generic mono input, the src has to be able to adapt to the sample rate
+pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
+
+# Generic mono input, the src has to be able to adapt to the sample rate
+pipeline: 'alsasrc device="plughw=2,0" ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true'
+
 # sample rate of the ASR model (currently 8k)
 asr_sample_rate: 16000
 
@@ -42,7 +51,7 @@ whisper:
 #  prefix: ''
 
 vad:
-  threshold: 0.3
+  threshold: 0.2
   min_silence_duration_ms: 300
 #  speech_pad_ms: 50
 

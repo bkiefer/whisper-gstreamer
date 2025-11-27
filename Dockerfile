@@ -6,10 +6,10 @@ RUN apt-get -q -qq update && apt-get upgrade -y
 RUN apt-get install -y --no-install-recommends --fix-missing \
     git curl ca-certificates \
     gcc cmake pkg-config libcairo2-dev libgirepository-2.0-dev python3-dev \
-    libgstreamer1.0-dev \
-    gstreamer1.0-pulseaudio gstreamer1.0-alsa \
+    libgstreamer1.0-dev gstreamer1.0-tools \
+    gstreamer1.0-pulseaudio gstreamer1.0-alsa alsa-utils \
     python3-gst-1.0 \
-    ffmpeg \
+    ffmpeg sox \
     && rm -rf /var/lib/apt/lists/*
 
 # Download the latest uv installer
@@ -22,5 +22,3 @@ ENV PATH="/root/.local/bin/:$PATH"
 WORKDIR /app
 RUN git clone https://github.com/bkiefer/whisper-gstreamer /app
 RUN uv sync
-
-CMD ["uv", "run", "./run_whisper.sh", "-c", "config.cfg"]

@@ -29,6 +29,7 @@ import gstmicpipeline as gm
 
 from vad_iterator import VADIterator
 
+MICRO="microphone"
 
 # configure logger
 logging.basicConfig(
@@ -129,7 +130,7 @@ class WhisperMicroServer():
     MIN_SILENCE_DETECTS = 30
     BUFFER_SIZE = 512
 
-    def __init__(self, config, micro=True, transcription_file=None):
+    def __init__(self, config, transcription_file=None):
         self.pid = "whisperasr"
         self.topics = {}  # string to fn or (fn, qos)
 
@@ -142,11 +143,11 @@ class WhisperMicroServer():
         self.asr_sample_rate = 16000
         self.buffers_queued = 6
 
-        self.loop = None
+        self.loop: asyncio.AbstractEventLoop
         self.is_running = True
-        self.from_micro = micro
+        self.audio_source = MICRO
 
-        if self.from_micro:
+        if self.from_micro():
             self.timestamp_fn = current_milli_time
             self.audio_queue = asyncio.Queue()
         else:
@@ -173,7 +174,6 @@ class WhisperMicroServer():
             self.topic += '/' + self.language
         self.transcription_queue = queue.Queue(maxsize=1000)
         self.initial_prompt = ''
-        self.client = None
         self.transcription_file = transcription_file
         self.__init_mqtt_client()
         # create 100 ms buffer with silence (2 bytes per sample): / 1000 * 100
@@ -195,7 +195,7 @@ class WhisperMicroServer():
         self.wf = None
 
     def __init_whisper(self):
-        self.whisper_model = None
+        self.whisper: WhisperModel
         if 'whisper' not in self.config:
             logger.error('no whisper config section: minimally specify model size or URL')
             sys.exit(1)
@@ -219,20 +219,21 @@ class WhisperMicroServer():
             f"initializing {whisper_config['model_size']} model "
             f"for {whisper_config['device']} {whisper_config['compute_type']} ...")
         model_path = modroot / 'whisper' / whisper_config['model_size']
-        self.whisper_model = WhisperModel(str(model_path),
-                                          device=whisper_config['device'],
-                                          compute_type=whisper_config['compute_type'])
+        self.whisper = WhisperModel(str(model_path),
+                                    device=whisper_config['device'],
+                                    compute_type=whisper_config['compute_type'])
         logger.info("Whisper model initialized")
 
     def __init_transcription_thread(self):
         logger.info("start transcription thread...")
         self.transcribe_thread = Thread(target=self.transcribe,
-                                        daemon=self.from_micro)
+                                        daemon=self.from_micro())
         self.transcribe_thread.start()
         logger.info("transcription thread running")
 
     def __init_mqtt_client(self):
         mqtt_config = self.config['mqtt']
+        self.client: mqtt.Client
         self.client = mqtt.Client(CallbackAPIVersion.VERSION2)
         if 'username' in mqtt_config and 'password' in mqtt_config:
             self.client.username_pw_set(mqtt_config['username'],
@@ -269,6 +270,9 @@ class WhisperMicroServer():
                 cb = cb[0]  # second is qos
             cb(client, userdata, message)
         return
+
+    def from_micro(self):
+        return self.audio_source == MICRO
 
     def wav_filename(self):
         return self.audio_dir + f'source-{current_milli_time(0):014d}.wav'
@@ -320,8 +324,7 @@ class WhisperMicroServer():
             trans.pop('info')
             trans.pop('segments')
             trans['text'] = text.strip()
-            if self.inputfile:
-                trans['filename'] = self.inputfile
+            trans['source'] = self.audio_source
             self.transcription_file.writerow(trans)
 
     def transcribe_success(self, result, audio_segment):
@@ -347,21 +350,22 @@ class WhisperMicroServer():
             result = None
             if not self.whisper_url:
                 try:
-                    logger.info("now transcribing")
-                    segments, info = self.whisper_model.transcribe(np.array(audio_segment), **conv_params)
-                    logger.info("transcribing...")
+                    logger.info("transcribing")
+                    segments, info = self.whisper.transcribe(np.array(audio_segment), **conv_params)
+                    logger.info("done ...")
                     transcripts = []
                     for segment in segments:
                         conv_dict = named_tupel_to_dictionary(segment)
                         transcripts.append(conv_dict)
                     result = {'info': named_tupel_to_dictionary(info),
                               'segments': transcripts,
-                              'start': start, 'end': end}
+                              'start': start, 'end': end,
+                              'source': self.audio_source}
                 except Exception as ex:
                     logger.error('whisper exception: {}'.format(ex))
                     traceback.print_exc()
-                    del self.whisper_model.model
-                    del self.whisper_model
+                    del self.whisper.model
+                    del self.whisper
                     self.__init_whisper()
             else:
                 segment = np.array(audio_segment, dtype=np.float32)
@@ -480,7 +484,6 @@ class WhisperMicroServer():
         self.device.stop()
 
     def read_file(self, file):
-        self.is_running = False   # leave transcribe when queue empty
         with wave.open(file, "rb") as wf:
             self.channels = wf.getnchannels()
             self.sample_rate = wf.getframerate()
@@ -510,9 +513,16 @@ class WhisperMicroServer():
         # self.processing.add_done_callback(
         #    lambda t: logger.info("processing loop finished"))
         for file in files:
-            self.inputfile = os.path.splitext(os.path.basename(file))[0]
-            logger.info("Processing {}".format(self.inputfile))
-            self.read_file(file)
+            curr_audio_source = self.audio_source
+            try:
+                p = Path(file)
+                self.audio_source = p.name
+                logger.info("Processing {}".format(self.audio_source))
+                self.is_running = False   # leave transcribe when queue
+                self.read_file(p)
+            finally:
+                self.audio_source = curr_audio_source
+
 
     def stop_batch(self):
         self.is_running = False

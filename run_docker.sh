@@ -5,12 +5,15 @@ if test -z "$1"; then
     exit 1
 fi
 scrdir=`dirname "$0"`
+config="$1"
+shift
 docker run -it \
+       --device /dev/snd --group-add audio \
        -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
        --add-host host.docker.internal:host-gateway \
        -v ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native \
        -v $HOME/.config/pulse/cookie:/root/.config/pulse/cookie \
-       -v "$scrdir/$1":/app/config.yml \
+       -v "$scrdir/${config}":/app/config.yml \
        -v "$scrdir/models":/app/models \
        -v "$scrdir/audio":/app/audio \
        -v "$scrdir/outputs":/app/outputs \
