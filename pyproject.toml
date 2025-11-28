@@ -1,17 +1,16 @@
 [project]
 name = "whisper-gstreamer"
-version = "0.1.0"
+version = "1.0.0"
 description = "A package to transcribe microphone or file input using whisper"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "ctranslate2>=4.6.0",
-    "faster-whisper==1.1.1",
+    "faster-whisper==1.2.1",
     "paho-mqtt>=2.1.0",
     "pygobject>=3.48.1",
     "pyyaml>=6.0",
     "requests>=2.32",
     "resampy>=0.4.3",
     "torch>=2.8.0",
-    "torchaudio<2.9"
 ]

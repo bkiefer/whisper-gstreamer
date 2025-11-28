@@ -6,10 +6,8 @@ language: de
 # adaptation_state_infile="state"
 # adaptation_state_outfile="state"
 
-#monitor_mic: true
-monitor_mic: false
-#monitor_asr: true
-monitor_asr: true
+monitor_mic: true
+monitor_asr: false
 
 # Address of MQTT broker, change do host.docker.internal for docker use
 mqtt:
@@ -28,6 +26,14 @@ mqtt:
 # channels: 6, used channel: 0 (combo channel), sample_rate: 16000
 # This pipeline does the right things already
 pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=6,rate={} ! deinterleave name=d d.src_0 ! appsink name=sink emit_signals=true"
+# ALSA instead of pulse
+#pipeline: 'alsasrc device="hw:1,0" ! audio/x-raw,format=S16LE,channels=1,rate=44100 ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'
+# ALSA with hw und resampling, if the src does not support setting params
+#pipeline: 'alsasrc device="hw:1,0" ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'
+
+# ALSA with plughw
+#pipeline: 'alsasrc device="plughw:1,0" ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'
+
 
 # sample rate of the ASR model (currently 8k)
 asr_sample_rate: 16000
@@ -37,9 +43,6 @@ whisper:
   model_size: large-v3-turbo
   device: gpu
   compute_type: float32
-#  task: null
-#  initial_prompt: ''
-#  prefix: ''
 
 vad:
   threshold: 0.3
