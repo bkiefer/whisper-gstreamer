@@ -53,6 +53,9 @@ class GstreamerMicroSink(object):
     def start(self):
         self.pipeline.set_state(Gst.State.PLAYING)
 
+    def pause(self):
+        self.pipeline.set_state(Gst.State.PAUSED)
+
     def stop(self):
         self.pipeline.set_state(Gst.State.NULL)
         self.main_loop.quit()

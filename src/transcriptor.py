@@ -190,10 +190,14 @@ class WhisperMicroServer():
 
     def __init__(self, config, transcription_file=None):
         self.pid = "whisperasr"
-        self.topics = {}  # string to fn or (fn, qos)
+        self.topics = {
+            self.pid + '/set_prompt': self._on_prompt_msg,
+            self.pid + '/control': self._on_control_msg,
+        }
 
         self.audio_dir = "audio/"
         self.language = "de"
+        self.encoding = "utf-8"
 
         self.channels = 1
         self.usedchannel = 0
@@ -204,6 +208,8 @@ class WhisperMicroServer():
         self.loop: asyncio.AbstractEventLoop
         self.is_running = True
         self.audio_source = MICRO
+        self.device = None
+        self.always_use_vad = False
 
         if self.from_micro():
             self.timestamp_fn = current_milli_time
@@ -284,7 +290,7 @@ class WhisperMicroServer():
 
     def __init_transcription_thread(self):
         logger.info("start transcription thread...")
-        self.transcribe_thread = Thread(target=self.transcribe,
+        self.transcribe_thread = Thread(target=self.transcribe_async,
                                         daemon=self.from_micro())
         self.transcribe_thread.start()
         logger.info("transcription thread running")
@@ -298,12 +304,37 @@ class WhisperMicroServer():
                                         mqtt_config['password'])
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
-        self.prompt_topic = self.pid + '/set_prompt'
-        self.topics[self.prompt_topic] = self._on_prompt_msg
+
+    def _pause(self):
+        if self.from_micro() and self.device:
+            self.device.pause()
+
+    def _unpause(self):
+        if self.from_micro() and self.device:
+            self.device.start()
 
     def _on_prompt_msg(self, client, userdata, message):
-        self.initial_prompt = message.payload
+        self.initial_prompt = message.payload.decode(self.encoding)
         logger.info(f'new prompt: {self.initial_prompt}')
+
+    def _on_control_msg(self, client, userdata, message):
+        message = message.payload.decode(self.encoding)
+        logger.info(f'control message: {message}')
+        match message:
+            case 'exit':
+                self.is_running = False
+            case 'pause_mic':
+                self._pause()
+            case 'unpause_mic':
+                self._unpause()
+            case _:
+                if message.startswith('process_file'):
+                    filename = message.split(':')[1]
+                    if filename.endswith('.csv'):
+                        self.process_dataset(Path(filename))
+                    else:
+                        # must be a readable audio file!
+                        self.process_file(filename)
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         logger.debug(f'CONNACK received with code {reason_code}')
@@ -391,53 +422,57 @@ class WhisperMicroServer():
                         % (segment['start'], segment['end'], segment['text']))
         self.send_transcription(result)
 
-    def transcribe(self):
+
+    def transcribe_async(self):
         """
         Monitor transcription queue for incoming audio to be transcribed with
         local Whisper and add resulting transcriptions to result list.
         """
-
         while self.is_running or not self.transcription_queue.empty():
             # this call blocks until an element can be retrieved from queue
             audio_segment, start, end = self.transcription_queue.get()
-            conv_params = self.config['whisper_transcription']
-            # if 'initial_prompt' not in conv_params and self.prompt:
-            if self.initial_prompt:
-                conv_params['initial_prompt'] = self.initial_prompt
-            result = None
-            if not self.whisper_url:
-                try:
-                    logger.info("transcribing")
-                    segments, info = self.whisper.transcribe(np.array(audio_segment), **conv_params)
-                    logger.info("done ...")
-                    transcripts = []
-                    for segment in segments:
-                        conv_dict = named_tupel_to_dictionary(segment)
-                        transcripts.append(conv_dict)
-                    result = {'info': named_tupel_to_dictionary(info),
-                              'segments': transcripts,
-                              'start': start, 'end': end,
-                              'source': self.audio_source}
-                except Exception as ex:
-                    logger.error('whisper exception: {}'.format(ex))
-                    traceback.print_exc()
-                    del self.whisper.model
-                    del self.whisper
-                    self.__init_whisper()
-            else:
-                segment = np.array(audio_segment, dtype=np.float32)
-                segment /= 32768
-                response = requests.post(url=self.whisper_url,
-                                         data=segment.tobytes(),
-                                         headers={'Content-Type': 'application/octet-stream'},
-                                         params=conv_params)
-                result = response.json()
-                result['start'] = start
-                result['end'] = end
+            self.transcribe(audio_segment, start, end)
+        logger.info("Leaving async transcribe")
 
-            if result and 'segments' in result:
-                self.transcribe_success(result, audio_segment)
-        logger.info("Leaving transcribe")
+    def transcribe(self, audio_segment, start, end ):
+        conv_params = self.config['whisper_transcription']
+        # if 'initial_prompt' not in conv_params and self.prompt:
+        if self.initial_prompt:
+            conv_params['initial_prompt'] = self.initial_prompt
+        result = None
+        if not self.whisper_url:
+            try:
+                logger.info("transcribing")
+                segments, info = self.whisper.transcribe(np.array(audio_segment), **conv_params)
+                logger.info("done ...")
+                transcripts = []
+                for segment in segments:
+                    conv_dict = named_tupel_to_dictionary(segment)
+                    transcripts.append(conv_dict)
+                result = {'info': named_tupel_to_dictionary(info),
+                          'segments': transcripts,
+                          'start': start, 'end': end,
+                          'source': self.audio_source}
+            except Exception as ex:
+                logger.error('whisper exception: {}'.format(ex))
+                traceback.print_exc()
+                del self.whisper.model
+                del self.whisper
+                self.__init_whisper()
+        else:
+            segment = np.array(audio_segment, dtype=np.float32)
+            segment /= 32768
+            response = requests.post(url=self.whisper_url,
+                                     data=segment.tobytes(),
+                                     headers={'Content-Type': 'application/octet-stream'},
+                                     params=conv_params)
+            result = response.json()
+            result['start'] = start
+            result['end'] = end
+
+        if result and 'segments' in result:
+            self.transcribe_success(result, audio_segment)
+
 
     def bytes2intlist(self, audio):
         frame = np.frombuffer(audio, dtype=np.int16)
@@ -497,6 +532,7 @@ class WhisperMicroServer():
                 self.am = None
                 await self.microphone_loop()
         finally:
+            self.device.stop()
             logger.info('Disconnecting...')
             self.mqtt_disconnect()
 
@@ -522,8 +558,7 @@ class WhisperMicroServer():
                     # milliseconds since sample_rate is Hz
                     duration = int(float(len(buf) * 1000) /
                                    (self.sample_rate * self.channels))
-                    self.transcription_queue.put((buf, now, now + duration))
-                    self.transcribe()
+                    self.transcribe(buf, now, now + duration)
                     break
 
     def read_file_vad(self, file):
@@ -551,33 +586,42 @@ class WhisperMicroServer():
                     pass
                 elif state == "end":
                     duration = int(len(buffer) * sample2time)
-                    self.transcription_queue.put((buffer, start_time,
-                                                  start_time + duration))
-                    self.transcribe()
+                    self.transcribe(buffer, start_time, start_time + duration)
                 processed_samples += len(data)
 
-    def run(self, config, files, mqtt, vad):
-        if mqtt:
-            print("Connecting to MQTT broker")
-            self.mqtt_connect()
+    def process_file(self, file):
         # self.loop = asyncio.get_running_loop()
         # self.processing = asyncio.create_task(self.audio_loop())
         # self.processing.add_done_callback(
         #    lambda t: logger.info("processing loop finished"))
-        for file in files:
-            curr_audio_source = self.audio_source
-            try:
-                p = Path(file)
-                self.audio_source = p.name
-                logger.info("Processing {}".format(self.audio_source))
-                self.is_running = False   # leave transcribe when queue
-                p = str(p) # currently wave.open does not accept Path objects
-                if vad:
-                    self.read_file_vad(p)
-                else:
-                    self.read_file(p)
-            finally:
-                self.audio_source = curr_audio_source
+        curr_audio = (self.audio_source, self.channels, self.sample_rate)
+        self._pause()
+        try:
+            p = Path(file)
+            self.audio_source = p.name
+            logger.info("Processing {}".format(self.audio_source))
+            p = str(p) # currently wave.open does not accept Path objects
+            if self.always_use_vad:
+                self.read_file_vad(p)
+            else:
+                self.read_file(p)
+        finally:
+            self.audio_source, self.channels, self.sample_rate = curr_audio
+            self._unpause()
+
+    def process_dataset(self, csvfilepath: Path):
+        current_source = self.audio_source
+        try:
+            filedir = csvfilepath.parent
+            self._pause()
+            self.audio_source = 'BATCH'
+            with open(csvfilepath) as csvfile:
+                reader = csv.DictReader(csvfile, delimiter=',')
+                for row in reader:
+                    self.process_file(filedir / row['file_name'])
+        finally:
+            self.audio_source = current_source
+            self._unpause()
 
 
     def stop_batch(self):
@@ -586,6 +630,9 @@ class WhisperMicroServer():
         if self.am:
             self.am.close()
         self.mqtt_disconnect()
+
+
+
 
 
 def process_files(server_class, config_file, files, output_dir, mqtt, vad):
@@ -605,7 +652,12 @@ def process_files(server_class, config_file, files, output_dir, mqtt, vad):
         writer.writeheader()
         config['audio_dir'] = outdir + os.sep
         ms = server_class(config, transcription_file=writer)
-        ms.run(config, files, mqtt, vad)
+        ms.always_use_vad = vad
+        if mqtt:
+            print("Connecting to MQTT broker")
+            ms.mqtt_connect()
+        for file in files:
+            ms.process_file(file)
 
 
 def load_config(file):
@@ -638,6 +690,7 @@ def main(server_class):
     else:
         config = load_config(args.config)
         ms = server_class(config)
+        ms.always_use_vad = args.vad
 
         logging.basicConfig(level=logging.INFO)
         try:
