@@ -1,0 +1,25 @@
+Here are some pipelines that worked for different setups:
+
+# Sennheiser USB headset, make sure it's the OS/pulse default device
+# This pipeline does the right conversion already
+#pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
+
+# ReSpeaker V2, make sure it's the OS/pulse default device
+# It's the multichannel device!
+# channels: 6, used channel: 0 (combo channel), sample_rate: 16000
+# This pipeline does the right things already
+pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=6,rate={} ! deinterleave name=d d.src_0 ! appsink name=sink emit_signals=true"
+
+# Generic mono input, with gstreamer resampling
+pipeline: "pulsesrc ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
+
+# Generic mono input, the src has to be able to adapt to the sample rate
+pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
+
+# ALSA with hw und resampling, if the src does not support setting params
+pipeline: 'alsasrc device="hw:1,0" ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'
+
+# ALSA with plughw
+pipeline: 'alsasrc device="plughw:1,0" ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'
+
+pipeline: 'pipewiresrc path="67" ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'
