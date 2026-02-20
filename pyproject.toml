@@ -1,6 +1,6 @@
 [project]
 name = "whisper-gstreamer"
-version = "1.0.0"
+version = "1.1.0"
 description = "A package to transcribe microphone or file input using whisper"
 readme = "README.md"
 requires-python = ">=3.11"

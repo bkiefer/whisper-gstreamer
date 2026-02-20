@@ -6,7 +6,7 @@ language: de
 # adaptation_state_infile="state"
 # adaptation_state_outfile="state"
 
-monitor_mic: true
+monitor_mic: false
 monitor_asr: false
 
 # Address of MQTT broker, change do host.docker.internal for docker use

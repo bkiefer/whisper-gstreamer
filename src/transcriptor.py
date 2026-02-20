@@ -139,10 +139,10 @@ class vad_state:
     def _is_voice(self) -> bool:
         return bool(self.buffer)
 
-    def add_audio(self, audio_as_intlist):
+    def add_audio(self, audio_as_intlist) -> tuple[str, list[int]]:
         self.voice_buffers.extend(audio_as_intlist)
         if len(self.voice_buffers) < vad_state.BUFFER_SIZE + self.framesqueued:
-            return None, None
+            return "", []
 
         # only check the last vad_state.BUFFER_SIZE samples for the VAD
         # we queue additional data to be able to provide data from the past
@@ -151,8 +151,8 @@ class vad_state:
         vadbuf = np.array(ichunk, dtype=np.int16) / 32768
         speech_dict = self.vad_iterator(vadbuf, return_seconds=True)
         #print(f'{speech_dict}')
-        transcription_buffer = None
-        voice_state = None
+        transcription_buffer = []
+        voice_state = ""
         if speech_dict:
             if "start" in speech_dict:
                 # arg ist processed time in milliseconds
@@ -164,7 +164,7 @@ class vad_state:
             elif "end" in speech_dict:
                 if not self._is_voice():
                     print('VAD end ignored')
-                    return "no_speech", None
+                    return "no_speech", []
                 print('>', end='', flush=True)
                 voice_state = "end"
                 self.buffer.extend(ichunk)
@@ -519,8 +519,8 @@ class WhisperMicroServer():
         pipeline = self.config["pipeline"] if "pipeline" in self.config \
             else gm.PIPELINE
         try:
-            self.device = gm.GstreamerMicroSink(callback=self.cb,
-                                                pipeline_spec=pipeline)
+            self.device: gm.GstreamerMicroSink = gm.GstreamerMicroSink(callback=self.cb,
+                                                                       pipeline_spec=pipeline)
             self.device.start()
             logger.info("Connecting to MQTT broker")
             self.mqtt_connect()
@@ -542,6 +542,7 @@ class WhisperMicroServer():
         self.device.stop()
 
     def read_file(self, file):
+        """Synchronously read the file and transcribe the audio."""
         with wave.open(file, "rb") as wf:
             self.channels = wf.getnchannels()
             self.sample_rate = wf.getframerate()
@@ -573,12 +574,14 @@ class WhisperMicroServer():
             processed_samples = 0
             state_vad = vad_state(self.buffers_queued, self.vad_iterator)
             active = True
+            start_time = 0
             while active:
                 data = wf.readframes(buffer_size)
                 if len(data) == 0:
                     data = self.silence_buffer
                     active = False
-
+                state: str
+                buffer: list[int]
                 state, buffer = state_vad.add_audio(self.bytes2intlist(data))
                 if state == "start":
                     start_time = int(processed_samples * sample2time)
@@ -589,14 +592,15 @@ class WhisperMicroServer():
                     self.transcribe(buffer, start_time, start_time + duration)
                 processed_samples += len(data)
 
-    def process_file(self, file):
+    def process_file(self, file, do_pausing=True):
         # self.loop = asyncio.get_running_loop()
         # self.processing = asyncio.create_task(self.audio_loop())
         # self.processing.add_done_callback(
         #    lambda t: logger.info("processing loop finished"))
         curr_audio = (self.audio_source, self.channels, self.sample_rate)
-        self._pause()
         try:
+            if do_pausing:
+                self._pause()
             p = Path(file)
             self.audio_source = p.name
             logger.info("Processing {}".format(self.audio_source))
@@ -605,22 +609,24 @@ class WhisperMicroServer():
                 self.read_file_vad(p)
             else:
                 self.read_file(p)
+        except Exception as ex:
+            logger.error(f"Error reading wav file: {ex}")
         finally:
             self.audio_source, self.channels, self.sample_rate = curr_audio
-            self._unpause()
+            if do_pausing:
+                self._unpause()
 
     def process_dataset(self, csvfilepath: Path):
-        current_source = self.audio_source
         try:
             filedir = csvfilepath.parent
             self._pause()
-            self.audio_source = 'BATCH'
             with open(csvfilepath) as csvfile:
                 reader = csv.DictReader(csvfile, delimiter=',')
                 for row in reader:
-                    self.process_file(filedir / row['file_name'])
+                    self.process_file(filedir / row['file_name'], False)
+        except Exception as ex:
+            logger.error(f"Error reading csv file: {ex}")
         finally:
-            self.audio_source = current_source
             self._unpause()
 
 
