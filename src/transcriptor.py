@@ -330,11 +330,7 @@ class WhisperMicroServer():
             case _:
                 if message.startswith('process_file'):
                     filename = message.split(':')[1]
-                    if filename.endswith('.csv'):
-                        self.process_dataset(Path(filename))
-                    else:
-                        # must be a readable audio file!
-                        self.process_file(filename)
+                    self.transcription_queue.put(filename)
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         logger.debug(f'CONNACK received with code {reason_code}')
@@ -428,10 +424,19 @@ class WhisperMicroServer():
         Monitor transcription queue for incoming audio to be transcribed with
         local Whisper and add resulting transcriptions to result list.
         """
-        while self.is_running or not self.transcription_queue.empty():
+        while self.is_running:
             # this call blocks until an element can be retrieved from queue
-            audio_segment, start, end = self.transcription_queue.get()
-            self.transcribe(audio_segment, start, end)
+            to_transcribe = self.transcription_queue.get()
+            if isinstance(to_transcribe, tuple):
+                audio_segment, start, end = to_transcribe
+                self.transcribe(audio_segment, start, end)
+            else: # a string representing a file to process
+                if to_transcribe.endswith('.csv'):
+                    self.process_dataset(Path(to_transcribe))
+                else:
+                    # must be a readable audio file!
+                    self.process_file(to_transcribe)
+
         logger.info("Leaving async transcribe")
 
     def transcribe(self, audio_segment, start, end ):
