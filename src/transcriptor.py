@@ -471,9 +471,12 @@ class WhisperMicroServer():
                                      data=segment.tobytes(),
                                      headers={'Content-Type': 'application/octet-stream'},
                                      params=conv_params)
-            result = response.json()
-            result['start'] = start
-            result['end'] = end
+            try:
+                result = response.json()
+                result['start'] = start
+                result['end'] = end
+            except Exception as ex:
+                logger.error(f'wrong response: {response} {ex}')
 
         if result and 'segments' in result:
             self.transcribe_success(result, audio_segment)
