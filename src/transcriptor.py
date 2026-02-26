@@ -475,6 +475,7 @@ class WhisperMicroServer():
                 result = response.json()
                 result['start'] = start
                 result['end'] = end
+                result['source'] = self.audio_source
             except Exception as ex:
                 logger.error(f'wrong response: {response} {ex}')
 
