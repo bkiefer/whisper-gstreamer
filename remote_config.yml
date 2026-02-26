@@ -38,7 +38,7 @@ whisper:
   #device: gpu
   #compute_type: float32
   #url: http://serv-9211.kl.dfki.de:8080/transcribe
-  url: http://serv-9211.kl.dfki.de:5022/transcribe
+  url: http://serv-9210.kl.dfki.de:5021/transcribe
 
 vad:
   threshold: 0.3
