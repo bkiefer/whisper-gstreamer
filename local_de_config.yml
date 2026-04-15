@@ -6,7 +6,7 @@ language: de
 # adaptation_state_infile="state"
 # adaptation_state_outfile="state"
 
-monitor_mic: false
+monitor_mic: true
 monitor_asr: false
 
 # Address of MQTT broker, change do host.docker.internal for docker use
@@ -50,7 +50,7 @@ vad:
 #  speech_pad_ms: 50
 
 whisper_transcription:
-    language: de
+# language: de # taken from top level, if specified
 #   task: asr
 #    initial_prompt: 'Andreas,Benno,Bodenoperator 1,Bodenoperator 2,Bodenroboter 2,Daniel,Dirk,Drohne,Drohnenoperator,Einsatzleiter,Lena,Markus,Mission Commander,Mission Operator,Operator 1,Operator 2,Operator Boden 1,Operator Boden 2,Operator UAV,Sven,Teamleader,Teamleiter,Teamleiter 1,Thorsten,UAV,UAV 1,UAV Drohne,UAV Operator,UGV 1,UGV 2,Feuerwehr Bochum,kommen,hört,höre'
 #   prefix: ""
