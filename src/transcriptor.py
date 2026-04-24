@@ -125,7 +125,7 @@ class Transkriptor():
         }
 
         self.audio_dir = "audio/"
-        self.language = "de"
+        self.language = ""
         self.encoding = "utf-8"
 
         self.channels = 1
