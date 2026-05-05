@@ -71,7 +71,7 @@ def audio_milli_time(audio_time):
     return round(audio_time * 1000)
 
 
-def named_tupel_to_dictionary(tupel):
+def named_tuple_to_dictionary(tuple):
     """
     Convert a named tuple into a dictionary. Use nested dictionaries if tuple
     value is another tupel.
@@ -80,14 +80,14 @@ def named_tupel_to_dictionary(tupel):
     """
 
     result_dict = {}
-    for key, value in asdict(tupel).items():
+    for key, value in asdict(tuple).items():
         if is_dataclass(value):
-            result_dict[key] = named_tupel_to_dictionary(value)
+            result_dict[key] = named_tuple_to_dictionary(value)
         elif isinstance(value, list):
             conv_list = []
             for item in value:
                 if is_dataclass(item):
-                    conv_list.append(named_tupel_to_dictionary(item))
+                    conv_list.append(named_tuple_to_dictionary(item))
                 elif isinstance(item, tuple):
                     # special handling of language prob lists
                     conv_list.append({'lang': item[0], 'prob': item[1]})

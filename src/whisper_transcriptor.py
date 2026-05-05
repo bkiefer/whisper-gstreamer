@@ -7,7 +7,7 @@ import numpy as np
 import traceback
 import requests
 
-from transcriptor import Transkriptor, modroot, main, named_tupel_to_dictionary
+from transcriptor import Transkriptor, modroot, main, named_tuple_to_dictionary
 
 from faster_whisper import WhisperModel
 
@@ -69,9 +69,9 @@ class WhisperMicroServer(Transkriptor):
                 logger.info("done ...")
                 transcripts = []
                 for segment in segments:
-                    conv_dict = named_tupel_to_dictionary(segment)
+                    conv_dict = named_tuple_to_dictionary(segment)
                     transcripts.append(conv_dict)
-                result = {'info': named_tupel_to_dictionary(info),
+                result = {'info': named_tuple_to_dictionary(info),
                           'segments': transcripts,
                           'start': start, 'end': end,
                           'source': self.audio_source}
