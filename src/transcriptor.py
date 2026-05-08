@@ -18,11 +18,9 @@ import json
 
 from dataclasses import is_dataclass, asdict
 
-import paho.mqtt.client as mqtt
-from paho.mqtt.enums import CallbackAPIVersion
-
 import gstmicpipeline as gm
 
+from mqtt_client import MqttClient
 from vad_iterator import VadState
 
 MICRO="microphone"
@@ -71,7 +69,7 @@ def audio_milli_time(audio_time):
     return round(audio_time * 1000)
 
 
-def named_tuple_to_dictionary(tuple):
+def to_dictionary(input):
     """
     Convert a named tuple into a dictionary. Use nested dictionaries if tuple
     value is another tupel.
@@ -80,14 +78,14 @@ def named_tuple_to_dictionary(tuple):
     """
 
     result_dict = {}
-    for key, value in asdict(tuple).items():
+    for key, value in asdict(input).items():
         if is_dataclass(value):
-            result_dict[key] = named_tuple_to_dictionary(value)
+            result_dict[key] = to_dictionary(value)
         elif isinstance(value, list):
             conv_list = []
             for item in value:
                 if is_dataclass(item):
-                    conv_list.append(named_tuple_to_dictionary(item))
+                    conv_list.append(to_dictionary(item))
                 elif isinstance(item, tuple):
                     # special handling of language prob lists
                     conv_list.append({'lang': item[0], 'prob': item[1]})
@@ -112,17 +110,30 @@ def open_wave_file(path, sample_rate, channels):
     return wf
 
 
-class Transkriptor():
+class Transkriptor(MqttClient):
     MAX_BUF_RETENTION = 40
     MIN_SPEECH_DETECTS = 3
     MIN_SILENCE_DETECTS = 30
     BUFFER_SIZE = 512
 
+    def _on_control_msg(self, client, userdata, message):
+        message = message.payload.decode(self.encoding)
+        logger.info(f'control message: {message}')
+        match message:
+            case 'exit':
+                self.is_running = False
+            case 'pause_mic':
+                self._pause()
+            case 'unpause_mic':
+                self._unpause()
+            case _:
+                if message.startswith('process_file'):
+                    filename = message.split(':')[1]
+                    self.transcription_queue.put(filename)
+
     def __init__(self, config, pid, transcription_file=None):
-        self.pid = pid
-        self.topics = {
-            self.pid + '/control': self._on_control_msg,
-        }
+        super().__init__(pid, config.get('mqtt') or {})
+        self.topics[pid + '/control'] = self._on_control_msg,
 
         self.audio_dir = "audio/"
         self.language = ""
@@ -167,7 +178,6 @@ class Transkriptor():
             self.topic += '/' + self.language
         self.initial_prompt = ''
         self.transcription_file = transcription_file
-        self.__init_mqtt_client()
         # create 2s buffer with silence (2 bytes per sample)
         self.silence_buffer = bytearray(self.asr_sample_rate * 2)
         # initialize silero VAD model
@@ -181,25 +191,6 @@ class Transkriptor():
         # for monitoring (eventually)
         self.am = None
         self.wf = None
-
-
-    valid_mqtt_keys = {'host', 'port', 'keepalive', 'bind_address', 'bind_port'
-                        'clean_start'}
-
-    def __init_mqtt_client(self):
-        if 'mqtt' not in self.config:
-            self.config['mqtt'] = { 'host':'localhost' }
-        mqtt_config = self.config['mqtt']
-        for key in mqtt_config:
-            if key not in self.__class__.valid_mqtt_keys:
-                del(key, mqtt_config)
-        self.client: mqtt.Client
-        self.client = mqtt.Client(CallbackAPIVersion.VERSION2)
-        if 'username' in mqtt_config and 'password' in mqtt_config:
-            self.client.username_pw_set(mqtt_config['username'],
-                                        mqtt_config['password'])
-        self.client.on_connect = self._on_connect
-        self.client.on_message = self._on_message
 
     def __init_transcription_thread(self):
         logger.info("start transcription thread...")
@@ -215,50 +206,6 @@ class Transkriptor():
     def _unpause(self):
         if self.from_micro() and self.device:
             self.device.start()
-
-    def _on_prompt_msg(self, client, userdata, message):
-        self.initial_prompt = message.payload.decode(self.encoding)
-        logger.info(f'new prompt: {self.initial_prompt}')
-
-    def _on_control_msg(self, client, userdata, message):
-        message = message.payload.decode(self.encoding)
-        logger.info(f'control message: {message}')
-        match message:
-            case 'exit':
-                self.is_running = False
-            case 'pause_mic':
-                self._pause()
-            case 'unpause_mic':
-                self._unpause()
-            case _:
-                if message.startswith('process_file'):
-                    filename = message.split(':')[1]
-                    self.transcription_queue.put(filename)
-
-    def _on_connect(self, client, userdata, flags, reason_code, properties):
-        logger.debug(f'CONNACK received with code {reason_code}')
-        # subscribe to all registered topics/callbacks
-        for topic in self.topics:
-            qos = 0
-            if topic is tuple:
-                qos = topic[1]
-                topic = topic[0]
-            self.client.subscribe(topic, qos)
-
-    def _on_message(self, client, userdata, message):
-        logger.debug(f"Received message {str(message.payload)} on topic {message.topic} with QoS {str(message.qos)}")
-        if message.topic not in self.topics:
-            self.topics[message.topic] = None
-            for topic in self.topics:
-                if mqtt.topic_matches_sub(topic, message.topic):
-                    self.topics[message.topic] = self.topics[topic]
-        cb = self.topics[message.topic]
-        if cb is not None:
-            if cb is tuple:
-                cb = cb[0]  # second is qos
-            cb(client, userdata, message)
-        return
-
     def from_micro(self):
         return self.audio_source == MICRO
 
@@ -286,15 +233,6 @@ class Transkriptor():
         """This is called (from a separate thread) for each audio block."""
         self.loop.call_soon_threadsafe(self.audio_queue.put_nowait,
                                        bytes(indata))
-
-    def mqtt_connect(self):
-        self.client.connect(**self.config['mqtt'])
-        self.client.loop_start()
-
-    def mqtt_disconnect(self):
-        if self.client:
-            self.client.loop_stop()
-            self.client.disconnect()
 
     def bytes2intlist(self, audio):
         frame = np.frombuffer(audio, dtype=np.int16)
@@ -400,7 +338,7 @@ class Transkriptor():
     def cb(self, inp, frames):
         self.callback(inp, frames, None, None)
 
-    async def run_micro(self):
+    async def run_micro(self, no_mqtt=False):
         """ TODO: REFACTOR"""
         self.inputfile = None
         self.loop = asyncio.get_running_loop()
@@ -410,8 +348,9 @@ class Transkriptor():
             self.device = gm.GstreamerMicroSink(callback=self.cb,
                                                 pipeline_spec=pipeline)
             self.device.start()
-            logger.info("Connecting to MQTT broker")
-            self.mqtt_connect()
+            if not no_mqtt:
+                logger.info("Connecting to MQTT broker")
+                self.mqtt_connect()
             if self.config.get('monitor_mic', False):
                 with open_wave_file(self.wav_filename(),
                                     self.sample_rate, self.channels) as self.am:
@@ -422,7 +361,8 @@ class Transkriptor():
         finally:
             self.device.stop()
             logger.info('Disconnecting...')
-            self.mqtt_disconnect()
+            if self.client:
+                self.mqtt_disconnect()
 
     def stop(self):
         self.is_running = False
@@ -565,6 +505,9 @@ def main(server_class, prog_name):
     parser.add_argument("-m", "--mqtt", action='store_true',
                         required=False,
                         help='send mqtt messages in batch processing')
+    parser.add_argument("-n", "--no_mqtt", action='store_true',
+                        required=False,
+                        help='don\'t send mqtt messages')
     parser.add_argument("-v", "--vad", action='store_true',
                         required=False,
                         help='use VAD for file processing')
@@ -581,7 +524,7 @@ def main(server_class, prog_name):
 
         logging.basicConfig(level=logging.INFO)
         try:
-            asyncio.run(ms.run_micro())
+            asyncio.run(ms.run_micro(args.no_mqtt))
         except Exception as ex:
             logger.error("Exception: " + str(ex))
             traceback.print_exc()

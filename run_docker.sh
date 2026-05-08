@@ -1,5 +1,6 @@
 #!/bin/bash
 #set -xe
+. utils.sh
 if test -z "$1"; then
     echo "Usage: $0 <config.yml>"
     exit 1
@@ -7,7 +8,7 @@ fi
 scrdir=`dirname "$0"`
 config="$1"
 shift
-docker run -it \
+docker run --rm \
        --device /dev/snd --group-add audio \
        -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
        --add-host host.docker.internal:host-gateway \
@@ -19,4 +20,4 @@ docker run -it \
        -v "$scrdir/outputs":/app/outputs \
        --gpus=all \
        --entrypoint=/bin/bash \
-       whisper_asr -c "./run_whisper.sh -m -c config.yml"
+       $(getimage) -c "./run_whisper.sh -m -c config.yml"

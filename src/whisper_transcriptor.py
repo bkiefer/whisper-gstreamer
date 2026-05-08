@@ -7,7 +7,7 @@ import numpy as np
 import traceback
 import requests
 
-from transcriptor import Transkriptor, modroot, main, named_tuple_to_dictionary
+from transcriptor import Transkriptor, modroot, main, to_dictionary
 
 from faster_whisper import WhisperModel
 
@@ -17,6 +17,9 @@ logger.setLevel(logging.INFO)
 
 
 class WhisperMicroServer(Transkriptor):
+    def _on_prompt_msg(self, client, userdata, message):
+        self.initial_prompt = message.payload.decode(self.encoding)
+        logger.info(f'new prompt: {self.initial_prompt}')
 
     def __init__(self, config, transcription_file=None):
         super().__init__(config, "whisperasr", transcription_file)
@@ -69,9 +72,9 @@ class WhisperMicroServer(Transkriptor):
                 logger.info("done ...")
                 transcripts = []
                 for segment in segments:
-                    conv_dict = named_tuple_to_dictionary(segment)
+                    conv_dict = to_dictionary(segment)
                     transcripts.append(conv_dict)
-                result = {'info': named_tuple_to_dictionary(info),
+                result = {'info': to_dictionary(info),
                           'segments': transcripts,
                           'start': start, 'end': end,
                           'source': self.audio_source}
