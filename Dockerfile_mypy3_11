@@ -8,7 +8,7 @@ RUN apt-get install -y --no-install-recommends --fix-missing \
     gcc cmake pkg-config libcairo2-dev libgirepository-2.0-dev python3-dev \
     libgstreamer1.0-dev gstreamer1.0-tools \
     gstreamer1.0-pulseaudio gstreamer1.0-alsa alsa-utils \
-    python3-gst-1.0 \
+    python3-gst-1.0 meson \
     ffmpeg sox espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
