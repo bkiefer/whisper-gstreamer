@@ -31,7 +31,7 @@ class MqttClient():
         # subscribe to all registered topics/callbacks
         for topic in self.topics:
             qos = 0
-            if topic is tuple:
+            if isinstance(topic, tuple):
                 qos = topic[1]
                 topic = topic[0]
             self.client.subscribe(topic, qos)
@@ -46,7 +46,7 @@ class MqttClient():
                     self.topics[message.topic] = self.topics[topic]
         cb = self.topics[message.topic]
         if cb is not None:
-            if cb is tuple:
+            if isinstance(cb, tuple):
                 cb = cb[0]  # second is qos
             cb(client, userdata, message)
         return

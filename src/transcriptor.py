@@ -133,7 +133,7 @@ class Transkriptor(MqttClient):
 
     def __init__(self, config, pid, transcription_file=None):
         super().__init__(pid, config.get('mqtt') or {})
-        self.topics[pid + '/control'] = self._on_control_msg,
+        self.topics[pid + '/control'] = self._on_control_msg
 
         self.audio_dir = "audio/"
         self.language = ""
