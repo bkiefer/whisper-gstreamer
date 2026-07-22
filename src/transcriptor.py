@@ -251,7 +251,7 @@ class Transkriptor(MqttClient):
 
     def send_transcription(self, trans: dict):
         if self.client:
-            self.client.publish(self.topic, json.dumps(trans, indent=None))
+            self.publish(self.topic, json.dumps(trans, indent=None))
         if self.transcription_file:
             # massage the information in trans into the right format
             trans.pop('info')
