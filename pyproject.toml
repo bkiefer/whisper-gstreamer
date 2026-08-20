@@ -1,6 +1,6 @@
 [project]
 name = "whisper-gstreamer"
-version = "1.2.1"
+version = "1.2.2"
 description = "A package to transcribe microphone or file input using whisper"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -9,8 +9,16 @@ dependencies = [
     "pygobject>=3.48.1",
     "pyyaml>=6.0",
     "resampy>=0.4.3",
-    "torch<2.8.0",
+    "torch>=2.8.0",
     "ctranslate2>=4.6.0",
     "faster-whisper>=1.2.1",
     "vosk>=0.3.45",
 ]
+
+[[tool.uv.index]]
+name = "cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "cu126" }

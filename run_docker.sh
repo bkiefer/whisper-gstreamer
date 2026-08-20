@@ -8,7 +8,7 @@ fi
 scrdir=`dirname "$0"`
 config="$1"
 shift
-docker run --rm \
+docker run --rm --name whisperasr \
        --device /dev/snd --group-add audio \
        -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
        --add-host host.docker.internal:host-gateway \
@@ -18,6 +18,7 @@ docker run --rm \
        -v "$scrdir/models":/app/models \
        -v "$scrdir/audio":/app/audio \
        -v "$scrdir/outputs":/app/outputs \
+       -v "$scrdir/inputs":/app/inputs \
        --gpus=all \
        --entrypoint=/bin/bash \
        $(getimage) -c "./run_whisper.sh -m -c config.yml"
