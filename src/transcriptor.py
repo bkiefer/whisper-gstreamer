@@ -299,7 +299,10 @@ class Transkriptor(MqttClient):
         return buf
 
     def start_buffer(self, buffer):
-        """To be extended by subclasses."""
+        """
+        This is the first buffer after the VAD signals the speech starts.
+
+        To be extended by subclasses."""
         self.start_time = current_milli_time()
         if self.config.get('monitor_asr', False):
             self.wf = open_wave_file(self.asrmon_filename(self.start_time),
@@ -307,11 +310,15 @@ class Transkriptor(MqttClient):
         return self.write_buffer(buffer)
 
     def continue_buffer(self, buffer):
-        """To be extended by subclass."""
+        """This is the next buffer while VAD thinks is speech is active still
+        To be extended by subclass."""
         return self.write_buffer(buffer)
 
     def end_buffer(self, buffer, end_time):
-        """To be extended by subclass."""
+        """This is the last buffer containes speech according VAD, followed by
+        silence.
+
+        To be extended by subclass."""
         buf = self.write_buffer(buffer)
         if self.wf:
             self.wf.close()

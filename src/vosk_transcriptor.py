@@ -17,7 +17,7 @@ class VoskMicroServer(Transkriptor):
 
     def __init__(self, config, transcription_file=None):
         super().__init__(config, "voskasr", transcription_file)
-        self.silence_buffer = bytearray(self.asr_sample_rate * 6)
+        self.silence_buffer = bytearray(self.asr_sample_rate * 1)
         self.__init_recognizer()
 
     def __init_recognizer(self):

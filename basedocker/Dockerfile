@@ -20,5 +20,6 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 ENV PATH="/root/.local/bin/:$PATH"
 
 WORKDIR /app
-RUN uv venv
-RUN uv pip install "torch<2.8.0" "torchaudio<=2.8.0" "paho-mqtt>=2.1.0" "pyyaml>=6.0"
+COPY pyproject.toml /app
+RUN uv sync
+RUN rm /app/pyproject.toml
