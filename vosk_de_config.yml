@@ -47,4 +47,4 @@ vad:
 #  speech_pad_ms: 50
 
 vosk:
-  model_path: vosk-model-de-0.21
+  model_path: vosk-model-de-tuda-0.6-900k
