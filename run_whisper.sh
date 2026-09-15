@@ -21,4 +21,4 @@ if test -z "$ops_dir"; then
 fi
 LD_LIBRARY_PATH="$ops_dir"
 export LD_LIBRARY_PATH
-uv run python -u $scrdir/src/whisper_transcriptor.py "$@"
+uv --project "$scrdir" run python -u $scrdir/src/whisper_transcriptor.py "$@"

@@ -1,4 +1,3 @@
 #!/bin/bash
 scrdir=`dirname $0`
-cd "$scrdir"
-uv run python -u $scrdir/src/vosk_transcriptor.py "$@"
+uv --project="$scrdir" run python -u $scrdir/src/vosk_transcriptor.py "$@"

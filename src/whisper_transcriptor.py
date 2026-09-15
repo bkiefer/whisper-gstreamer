@@ -60,6 +60,10 @@ class WhisperMicroServer(Transkriptor):
 
 
     def transcribe(self, audio_segment, start, end):
+        """
+        The audio segment is signed integer, 16bit, resampled to
+        self.asr_frame_rate
+        """
         conv_params = self.config['whisper_transcription']
         # if 'initial_prompt' not in conv_params and self.prompt:
         if self.initial_prompt:
@@ -68,6 +72,7 @@ class WhisperMicroServer(Transkriptor):
         if not self.whisper_url:
             try:
                 logger.info("transcribing")
+                # The whisper model expects an np_array of 16bit signed integer
                 segments, info = self.whisper.transcribe(np.array(audio_segment), **conv_params)
                 logger.info("done ...")
                 transcripts = []

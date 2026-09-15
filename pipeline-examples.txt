@@ -17,7 +17,9 @@ pipeline: "pulsesrc ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={
 pipeline: "pulsesrc ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit-signals=true"
 
 # ALSA with hw und resampling, if the src does not support setting params
-pipeline: 'alsasrc device="hw:1,0" ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'
+# PREFER THIS, THE PIPELINE BELOW DOES NOT SEEM TO WORK ANYMORE
+pipeline: 'alsasrc device="hw:1,0" ! audioconvert ! audio/x-raw,format=S16LE,channels=1 ! audioresample ! audio/x-raw,rate={} ! appsink name=sink emit_signals=true'
+#pipeline: 'alsasrc device="hw:1,0" ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'
 
 # ALSA with plughw
 pipeline: 'alsasrc device="plughw:1,0" ! audio/x-raw,format=S16LE,channels=1,rate={} ! appsink name=sink emit_signals=true'

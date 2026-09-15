@@ -6,6 +6,9 @@ if test -z "$1"; then
     exit 1
 fi
 scrdir=`dirname "$0"`
+if test -z "$run_script"; then
+    run_script="./run_whisper.sh"
+fi
 config="$1"
 shift
 docker run --rm --name whisperasr \
@@ -13,7 +16,6 @@ docker run --rm --name whisperasr \
        -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
        --add-host host.docker.internal:host-gateway \
        -v ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native \
-       -v $HOME/.config/pulse/cookie:/root/.config/pulse/cookie \
        -v "$scrdir/${config}":/app/config.yml \
        -v "$scrdir/models":/app/models \
        -v "$scrdir/audio":/app/audio \
@@ -21,4 +23,4 @@ docker run --rm --name whisperasr \
        -v "$scrdir/inputs":/app/inputs \
        --gpus=all \
        --entrypoint=/bin/bash \
-       $(getimage) -c "./run_whisper.sh -m -c config.yml"
+       $(getimage) -c "$run_script -m -c config.yml"
